@@ -93,9 +93,16 @@ LectADC mediana9(uint8_t pin) {
 
 // ─── Lectura de sensores ──────────────────────────────────────────────────
 void leer_sensores() {
-  // DHT11
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
+  // DHT11: readHumidity(force=true) hace la lectura hardware y cachea T+H.
+  // readTemperature() sin force usa ese mismo cache — una sola lectura física.
+  // Con fuerza en temperatura se dispara una segunda lectura inmediata → falla.
+  float h = NAN, t = NAN;
+  for (int i = 0; i < 3; i++) {
+    if (i > 0) delay(2000);       // DHT11 necesita ≥1 s entre lecturas
+    h = dht.readHumidity(true);   // fuerza lectura hardware → cachea T y H
+    t = dht.readTemperature();    // usa cache del readHumidity anterior
+    if (!isnan(h) && !isnan(t)) break;
+  }
   s.dht_ok   = !isnan(h) && !isnan(t);
   s.hum_aire = s.dht_ok ? h : NAN;
   s.temp_dht = s.dht_ok ? t : NAN;
@@ -167,6 +174,7 @@ bool conectar_wifi() {
     configTime(-3*3600, 0, "pool.ntp.org", "time.nist.gov");
     Serial.println("IP: " + WiFi.localIP().toString());
   } else {
+    WiFi.disconnect(false);  // detiene intento activo sin crashear al reconectar
     Serial.println("Sin WiFi");
   }
   return ok;
