@@ -184,7 +184,7 @@ bool enviar() {
   http.addHeader("X-Device-Token", DEVICE_TOKEN);
   http.setTimeout(15000);
 
-  StaticJsonDocument<512> doc;
+  JsonDocument doc;
   doc["dispositivo"]    = "maceta-01";
   doc["numero_muestra"] = n_muestra;
   doc["boot_id"]        = boot_id;
