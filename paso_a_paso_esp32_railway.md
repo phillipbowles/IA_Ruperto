@@ -1,0 +1,395 @@
+# Paso a paso para integrar la ESP32 con Railway
+
+## Objetivo
+
+Dejar funcionando el siguiente flujo:
+
+```text
+Sensores -> ESP32 -> Wi-Fi -> HTTPS -> Backend en Railway -> PostgreSQL
+                                                       |
+                                                       +-> API y archivo CSV
+```
+
+Al finalizar, la ESP32 debe poder funcionar conectada solamente a un cargador USB, tomar las mediciones, mostrarlas localmente y enviarlas a Railway sin depender de una computadora encendida.
+
+## Resultado que debe entregar el compañero
+
+- Repositorio GitHub privado con el proyecto.
+- Backend desplegado en Railway.
+- PostgreSQL conectado al backend.
+- URL pública de la API.
+- Prueba de una medición guardada.
+- Archivo `secrets.h` configurado únicamente en la computadora que carga la ESP32.
+- Captura o registro de diez envíos consecutivos correctos.
+- Confirmación de que una medición duplicada no crea otra fila.
+- Confirmación de que el CSV se puede descargar.
+
+## 1. Revisar el hardware
+
+No es necesario cambiar los pines para utilizar Wi-Fi o Railway.
+
+| Componente | Conexión ESP32 | Observación |
+|---|---:|---|
+| LDR, señal | GPIO34 | Entrada analógica ADC1 |
+| Humedad del suelo, AO | GPIO35 | Entrada analógica ADC1 |
+| DHT11, DATA | GPIO4 | Temperatura y humedad ambiente |
+| Termistor opcional, señal | GPIO32 | Entrada analógica ADC1 |
+| LCD I2C, SDA | GPIO21 | Dirección detectada: `0x27` |
+| LCD I2C, SCL | GPIO22 | Dirección detectada: `0x27` |
+| Semáforo rojo | GPIO25 | Salida digital con resistencia |
+| Semáforo amarillo | GPIO26 | Salida digital con resistencia |
+| Semáforo verde | GPIO27 | Salida digital con resistencia |
+| Botón | GPIO19 a GND | Configurar como `INPUT_PULLUP` |
+
+Comprobar antes de continuar:
+
+- Todos los módulos comparten GND.
+- Los sensores analógicos reciben 3,3 V.
+- Cada LED tiene una resistencia de 220 a 330 ohmios.
+- El botón está entre GPIO19 y GND, no entre GPIO19 y 3,3 V.
+- La fuente USB es estable y el cable está en buenas condiciones.
+- El lugar dispone de Wi-Fi de 2,4 GHz sin portal cautivo.
+
+### Precaución con el LCD
+
+Si el adaptador I2C del LCD se alimenta con 5 V, verificar que SDA y SCL no queden elevados a 5 V. La ESP32 trabaja con lógica de 3,3 V. Utilizar un conversor bidireccional de nivel I2C o alimentar el adaptador a 3,3 V si el módulo funciona correctamente así.
+
+## 2. Obtener el proyecto
+
+El repositorio contiene:
+
+```text
+app/             backend FastAPI
+docs/            documentación del proyecto
+firmware/        código y configuración de la ESP32
+notebooks/       análisis de datos
+outputs/         informes de decisiones
+railway.json     configuración del despliegue
+requirements.txt dependencias de Python
+```
+
+Una vez publicado en GitHub, clonar el repositorio:
+
+```bash
+git clone URL_DEL_REPOSITORIO
+cd maceta-inteligente
+```
+
+Nunca agregar contraseñas, tokens, archivos `.env` ni `secrets.h` a Git.
+
+## 3. Probar el backend localmente
+
+Se requiere Python 3.11 o posterior.
+
+Crear y activar un entorno virtual:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Instalar las dependencias:
+
+```bash
+pip install -r requirements.txt
+```
+
+Crear la configuración local:
+
+```bash
+cp .env.example .env
+```
+
+Editar `.env` y reemplazar el token de ejemplo por uno largo y aleatorio. No reutilizar una contraseña personal.
+
+Para cargar las variables y ejecutar la API:
+
+```bash
+set -a
+source .env
+set +a
+uvicorn app.main:app --reload
+```
+
+Abrir en el navegador:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Probar `GET /health`. La respuesta esperada es:
+
+```json
+{"status":"ok"}
+```
+
+## 4. Probar una medición local
+
+Desde la documentación `/docs`, abrir `POST /api/v1/mediciones`, pulsar **Try it out** y utilizar este ejemplo:
+
+```json
+{
+  "dispositivo": "maceta-01",
+  "numero_muestra": 1,
+  "temperatura_c": 24.3,
+  "humedad_ambiente_pct": 61,
+  "luz_raw": 2870,
+  "luz_pct": 70,
+  "suelo_raw": 1940,
+  "suelo_pct": 54,
+  "termistor_raw": null,
+  "condicion_codigo": 1,
+  "condicion_etiqueta": "saludable",
+  "wifi_rssi": -58,
+  "errores": []
+}
+```
+
+Agregar el encabezado:
+
+```text
+X-Device-Token: EL_TOKEN_CONFIGURADO
+```
+
+Resultados esperados:
+
+- Sin token: `401 Unauthorized`.
+- Con token correcto: `201 Created`.
+- Repetir el mismo dispositivo y número de muestra: `200 OK` con `duplicado: true`.
+
+Comprobar también:
+
+```text
+GET /api/v1/mediciones/ultima
+GET /api/v1/mediciones
+GET /api/v1/mediciones.csv
+```
+
+## 5. Crear el proyecto en Railway
+
+1. Iniciar sesión en Railway.
+2. Crear un proyecto nuevo.
+3. Elegir **Deploy from GitHub repo**.
+4. Autorizar el repositorio privado cuando Railway lo solicite.
+5. Seleccionar el repositorio `maceta-inteligente`.
+6. Esperar el primer build.
+
+Railway debe detectar Python mediante `requirements.txt` y utilizar la configuración de `railway.json`.
+
+El comando configurado para iniciar la aplicación es:
+
+```text
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+El healthcheck configurado es:
+
+```text
+/health
+```
+
+## 6. Agregar PostgreSQL
+
+Dentro del mismo proyecto Railway:
+
+1. Pulsar **New**.
+2. Seleccionar **Database**.
+3. Seleccionar **PostgreSQL**.
+4. Esperar a que el servicio quede disponible.
+5. Abrir el servicio del backend.
+6. Entrar en **Variables**.
+7. Agregar una referencia a la variable `DATABASE_URL` del servicio PostgreSQL.
+
+No copiar manualmente la contraseña de PostgreSQL dentro del código.
+
+Cuando `DATABASE_URL` quede disponible, volver a desplegar el backend. La aplicación creará inicialmente la tabla `mediciones`.
+
+## 7. Configurar las variables de Railway
+
+En el servicio del backend, configurar:
+
+```text
+ENVIRONMENT=production
+DEVICE_TOKEN=UN_TOKEN_LARGO_Y_ALEATORIO
+DATABASE_URL=referencia al servicio PostgreSQL
+```
+
+Marcar `DEVICE_TOKEN` como variable sellada cuando la interfaz lo permita.
+
+El mismo valor de `DEVICE_TOKEN` deberá colocarse después en `firmware/secrets.h`. No publicarlo en capturas, mensajes grupales o commits.
+
+## 8. Generar la URL pública
+
+1. Abrir el servicio del backend.
+2. Entrar en **Settings**.
+3. Buscar **Networking / Public Networking**.
+4. Pulsar **Generate Domain**.
+
+Railway entregará una dirección parecida a:
+
+```text
+https://maceta-inteligente-production.up.railway.app
+```
+
+Comprobar en el navegador:
+
+```text
+https://DOMINIO_RAILWAY/health
+https://DOMINIO_RAILWAY/docs
+```
+
+No continuar con la ESP32 hasta que `/health` devuelva `{"status":"ok"}`.
+
+## 9. Probar Railway antes de modificar la ESP32
+
+En `/docs`, repetir la medición ficticia del paso 4 utilizando el token configurado en Railway.
+
+Verificar:
+
+- El backend devuelve `201 Created`.
+- `GET /api/v1/mediciones/ultima` devuelve la misma lectura.
+- `GET /api/v1/mediciones.csv` descarga un CSV con la lectura.
+- Repetir el número de muestra no duplica la fila.
+
+Si esta prueba falla, corregir primero Railway o PostgreSQL. No modificar sensores para intentar resolver un error del backend.
+
+## 10. Preparar los secretos de la ESP32
+
+Dentro de `firmware/`, copiar:
+
+```text
+secrets.example.h -> secrets.h
+```
+
+Completar solamente en la computadora local:
+
+```cpp
+#pragma once
+
+#define WIFI_SSID "NOMBRE_WIFI"
+#define WIFI_PASSWORD "CLAVE_WIFI"
+#define API_URL "https://DOMINIO_RAILWAY/api/v1/mediciones"
+#define DEVICE_TOKEN "EL_MISMO_TOKEN_DE_RAILWAY"
+```
+
+Antes de cualquier commit, ejecutar:
+
+```bash
+git status
+```
+
+Confirmar que `secrets.h` no aparece entre los archivos a subir.
+
+## 11. Adaptar el firmware
+
+Mantener el código de sensores que ya fue probado y agregar estas responsabilidades:
+
+1. Conectar y reconectar el Wi-Fi.
+2. Leer sensores cada 2 segundos.
+3. Actualizar LCD y semáforo sin bloquear el programa.
+4. Promediar varias lecturas analógicas.
+5. Crear un número de muestra creciente.
+6. Formar el JSON con todos los sensores.
+7. Enviar por HTTPS cada 5 o 10 minutos.
+8. Incluir `X-Device-Token` en la solicitud.
+9. Mostrar el resultado en Serial y LCD.
+10. Reintentar si falla la conexión.
+
+No utilizar `delay()` largos para controlar el intervalo de envío. Utilizar `millis()` para que el botón, la pantalla y la reconexión continúen funcionando.
+
+### Frecuencias recomendadas
+
+| Acción | Intervalo |
+|---|---:|
+| Leer DHT11 | 2 segundos |
+| Leer entradas analógicas | 2 segundos |
+| Actualizar LCD | 2 segundos |
+| Enviar durante pruebas | 30 segundos |
+| Enviar durante recolección | 5 o 10 minutos |
+
+## 12. Comportamiento del botón
+
+Configurar GPIO19 así:
+
+```cpp
+pinMode(19, INPUT_PULLUP);
+```
+
+Comportamiento sugerido:
+
+- Pulsación corta: cambiar la condición manual.
+- Secuencia: `sin_etiquetar -> saludable -> estresada -> marchita`.
+- Pulsación larga: forzar una medición y envío inmediato.
+
+La condición manual debe representar una observación humana de la planta, no una categoría calculada automáticamente con el sensor de suelo.
+
+## 13. Manejar errores y reintentos
+
+La ESP32 debe interpretar:
+
+| Resultado | Acción |
+|---|---|
+| `201` | Medición nueva guardada |
+| `200` y `duplicado: true` | Medición ya guardada; no reenviar |
+| `401` | Revisar el token |
+| `422` | Revisar JSON o valores fuera de rango |
+| `500` o `503` | Reintentar más tarde |
+| Sin conexión o timeout | Reconectar y reintentar |
+
+No incrementar definitivamente `numero_muestra` hasta guardar el identificador en memoria persistente. Si la placa se reinicia y vuelve a comenzar siempre desde cero, el backend podría considerar duplicadas las nuevas lecturas.
+
+Para la primera prueba alcanza con reintentar en memoria. Después se recomienda guardar las mediciones fallidas en una cola limitada dentro de LittleFS o Preferences.
+
+## 14. Prueba final sin computadora
+
+1. Cargar el firmware definitivo mediante Arduino IDE.
+2. Confirmar por Monitor Serie al menos dos envíos.
+3. Desconectar la ESP32 de la computadora.
+4. Conectarla a un cargador USB.
+5. Esperar el intervalo de envío.
+6. Abrir `/api/v1/mediciones/ultima` desde otro dispositivo.
+7. Confirmar que la fecha y los valores cambiaron.
+8. Apagar y encender el router o desconectar temporalmente la red.
+9. Confirmar que la ESP32 sigue mostrando sensores localmente.
+10. Restaurar Wi-Fi y comprobar que vuelve a enviar.
+
+## 15. Lista de aceptación
+
+Marcar cada punto antes de considerar terminada la tarea:
+
+- [ ] El cableado coincide con la tabla.
+- [ ] `/health` responde correctamente en Railway.
+- [ ] PostgreSQL está conectado mediante `DATABASE_URL`.
+- [ ] Un token incorrecto devuelve `401`.
+- [ ] Una medición válida devuelve `201`.
+- [ ] Un reintento no duplica la medición.
+- [ ] La ESP32 se conecta sola después de reiniciarse.
+- [ ] La ESP32 funciona con un cargador, sin computadora.
+- [ ] El LCD muestra el estado de la nube.
+- [ ] El botón devuelve una respuesta y registra la condición.
+- [ ] Se observan diez envíos consecutivos.
+- [ ] El CSV contiene timestamps, sensores y condición manual.
+- [ ] `secrets.h` y `.env` no están en GitHub.
+- [ ] El equipo conserva una copia del CSV fuera de Railway.
+
+## 16. Información que debe comunicar al equipo
+
+Al finalizar, enviar solamente:
+
+- URL del repositorio.
+- URL pública del backend.
+- Estado de `/health`.
+- Fecha y hora de la última medición.
+- Cantidad de mediciones almacenadas.
+- Captura del dashboard de Railway sin mostrar secretos.
+- Problemas encontrados y decisiones tomadas.
+
+No enviar contraseñas, `DATABASE_URL`, credenciales Wi-Fi ni `DEVICE_TOKEN` por el grupo.
+
+## Referencias
+
+- [Railway: despliegues desde GitHub](https://docs.railway.com/deployments/github-autodeploys)
+- [Railway: PostgreSQL](https://docs.railway.com/databases/postgresql)
+- [Railway: variables y secretos](https://docs.railway.com/variables)
+- [Railway: dominios públicos y HTTPS](https://docs.railway.com/networking/public-networking)
+- [Railway: healthchecks](https://docs.railway.com/deployments/healthchecks)

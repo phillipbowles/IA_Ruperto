@@ -1,0 +1,26 @@
+# Secretos — NUNCA subir
+.env
+secrets.h
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Base de datos local
+*.db
+*.sqlite
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# IDE
+.idea/
+.vscode/
+*.swp
