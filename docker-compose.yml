@@ -1,0 +1,86 @@
+# Entorno de desarrollo local completo: base, API y front.
+#
+#   docker compose up --build      levanta todo (migra solo)
+#   docker compose logs -f backend seguir las migraciones y el server
+#   docker compose down            parar; agregar -v para borrar también los datos
+#
+# La primera vez: cp .env.example .env
+
+name: plantaia
+
+services:
+  # ─── base de datos ──────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-planta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-planta}
+      POSTGRES_DB:       ${POSTGRES_DB:-maceta}
+    ports:
+      # Configurable por si ya hay un Postgres ocupando el 5432 en la máquina.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - datos_pg:/var/lib/postgresql/data
+    healthcheck:
+      # El backend espera a que esto pase antes de arrancar: sin el healthcheck,
+      # `alembic upgrade head` corre contra una base que todavía no acepta
+      # conexiones y el contenedor muere en el primer arranque.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planta} -d ${POSTGRES_DB:-maceta}"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+    restart: unless-stopped
+
+  # ─── API ────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-planta}:${POSTGRES_PASSWORD:-planta}@db:5432/${POSTGRES_DB:-maceta}
+      DEVICE_TOKEN:   ${DEVICE_TOKEN:?falta DEVICE_TOKEN — copiá .env.example a .env}
+      CORS_ORIGENES:  ${CORS_ORIGENES:-http://localhost:5173}
+      ENVIRONMENT:    development
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Bind mount para que --reload vea los cambios sin rebuildear la imagen.
+      - ./backend:/app
+      # El paquete instalado en modo editable vive acá dentro; si el bind mount
+      # del host lo tapara, el import fallaría.
+      - /app/plantaia_backend.egg-info
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ─── front ──────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      # Dentro de la red del compose el backend se llama por su nombre de servicio.
+      VITE_API_URL: http://backend:8000
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      # Volumen nombrado encima del bind mount: si no, el node_modules del host
+      # (inexistente, o compilado para otra arquitectura) pisa el del contenedor.
+      - node_modules:/app/node_modules
+    restart: unless-stopped
+
+volumes:
+  datos_pg:
+  node_modules:

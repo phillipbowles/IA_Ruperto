@@ -11,10 +11,25 @@ env/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.ruff_cache/
 
 # Base de datos local
 *.db
 *.sqlite
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Frontend
+node_modules/
+frontend/dist/
+.vite/
+
+# Notebooks
+.ipynb_checkpoints/
 
 # macOS
 .DS_Store
@@ -24,3 +39,6 @@ build/
 .idea/
 .vscode/
 *.swp
+
+# Claude Code — preferencias personales, no del equipo
+.claude/settings.local.json
