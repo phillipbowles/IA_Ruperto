@@ -28,25 +28,18 @@ Al finalizar, la ESP32 debe poder funcionar conectada solamente a un cargador US
 
 No es necesario cambiar los pines para utilizar Wi-Fi o Railway.
 
-| Componente | Conexión ESP32 | Observación |
-|---|---:|---|
-| LDR, señal | GPIO34 | Entrada analógica ADC1 |
-| Humedad del suelo, AO | GPIO35 | Entrada analógica ADC1 |
-| DHT11, DATA | GPIO4 | Temperatura y humedad ambiente |
-| Termistor opcional, señal | GPIO32 | Entrada analógica ADC1 |
-| LCD I2C, SDA | GPIO21 | Dirección detectada: `0x27` |
-| LCD I2C, SCL | GPIO22 | Dirección detectada: `0x27` |
-| Semáforo rojo | GPIO25 | Salida digital con resistencia |
-| Semáforo amarillo | GPIO26 | Salida digital con resistencia |
-| Semáforo verde | GPIO27 | Salida digital con resistencia |
-| Botón | GPIO19 a GND | Configurar como `INPUT_PULLUP` |
+> **El mapa de pines está en [CLAUDE.md](../CLAUDE.md#mapa-de-pines-fijo-no-cambiar).**
+> La tabla que estaba acá contradecía al firmware en tres filas (suelo,
+> termistor y botón) y omitía el GPIO33 que alimenta la sonda. Se eliminó a
+> propósito: un solo lugar define el cableado.
 
 Comprobar antes de continuar:
 
 - Todos los módulos comparten GND.
 - Los sensores analógicos reciben 3,3 V.
 - Cada LED tiene una resistencia de 220 a 330 ohmios.
-- El botón está entre GPIO19 y GND, no entre GPIO19 y 3,3 V.
+- El botón está entre GPIO13 y GND, no entre GPIO13 y 3,3 V.
+- La sonda de suelo recibe VCC desde GPIO33, no desde el riel de 3V3.
 - La fuente USB es estable y el cable está en buenas condiciones.
 - El lugar dispone de Wi-Fi de 2,4 GHz sin portal cautivo.
 
@@ -59,13 +52,12 @@ Si el adaptador I2C del LCD se alimenta con 5 V, verificar que SDA y SCL no qued
 El repositorio contiene:
 
 ```text
-app/             backend FastAPI
-docs/            documentación del proyecto
-firmware/        código y configuración de la ESP32
-notebooks/       análisis de datos
-outputs/         informes de decisiones
-railway.json     configuración del despliegue
-requirements.txt dependencias de Python
+backend/    API FastAPI, migraciones y despliegue Railway
+firmware/   proyecto PlatformIO de la ESP32
+frontend/   dashboard y pantalla de anotación
+docs/       documentación y decisiones del proyecto
+notebooks/  análisis de datos y entrenamiento
+outputs/    informes
 ```
 
 Una vez publicado en GitHub, clonar el repositorio:
@@ -77,22 +69,10 @@ cd maceta-inteligente
 
 Nunca agregar contraseñas, tokens, archivos `.env` ni `secrets.h` a Git.
 
-## 3. Probar el backend localmente
+## 3. Levantar el entorno local
 
-Se requiere Python 3.11 o posterior.
-
-Crear y activar un entorno virtual:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Instalar las dependencias:
-
-```bash
-pip install -r requirements.txt
-```
+No hace falta instalar Python, Postgres ni Node en la máquina: cada servicio
+corre en su propio contenedor. Solo se necesita **Docker Desktop** andando.
 
 Crear la configuración local:
 
@@ -100,22 +80,44 @@ Crear la configuración local:
 cp .env.example .env
 ```
 
-Editar `.env` y reemplazar el token de ejemplo por uno largo y aleatorio. No reutilizar una contraseña personal.
+Editar `.env` y reemplazar `DEVICE_TOKEN` por uno largo y aleatorio
+(`openssl rand -hex 32`). No reutilizar una contraseña personal.
 
-Para cargar las variables y ejecutar la API:
+Levantar todo:
 
 ```bash
-set -a
-source .env
-set +a
-uvicorn app.main:app --reload
+docker compose up --build
 ```
 
-Abrir en el navegador:
+La primera vez tarda: baja las imágenes y compila. Queda andando:
+
+| Servicio | URL | Qué es |
+|---|---|---|
+| backend | http://localhost:8000/docs | la API con su Swagger |
+| frontend | http://localhost:5173 | el dashboard |
+| db | `localhost:5432` | Postgres 16 |
+
+Las migraciones se aplican solas al arrancar. En los logs del backend tiene que
+aparecer, antes de que levante el servidor:
 
 ```text
-http://127.0.0.1:8000/docs
+→ aplicando migraciones (alembic upgrade head)
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Esquema inicial
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Hora del dispositivo
+→ migraciones al día
+→ arrancando servidor
 ```
+
+Si el backend se cae ahí, es una migración que falló: **no** hay que reiniciar
+el contenedor hasta entender por qué. Está cortando a propósito para no servir
+contra una base a medio migrar.
+
+Para parar: `docker compose down`. Para parar y **borrar los datos**:
+`docker compose down -v`.
+
+## 4. Probar una medición local
+
+Abrir http://localhost:8000/docs.
 
 Probar `GET /health`. La respuesta esperada es:
 
@@ -123,23 +125,29 @@ Probar `GET /health`. La respuesta esperada es:
 {"status":"ok"}
 ```
 
-## 4. Probar una medición local
-
-Desde la documentación `/docs`, abrir `POST /api/v1/mediciones`, pulsar **Try it out** y utilizar este ejemplo:
+Después, desde `/docs`, abrir `POST /api/v1/mediciones`, pulsar **Try it out** y utilizar este ejemplo:
 
 ```json
 {
   "dispositivo": "maceta-01",
   "numero_muestra": 1,
+  "boot_id": 3,
+  "firmware_version": "1.1.0",
+  "ts_dispositivo_unix": 1757600000,
   "temperatura_c": 24.3,
   "humedad_ambiente_pct": 61,
   "luz_raw": 2870,
+  "luz_mv": 2310,
   "luz_pct": 70,
   "suelo_raw": 1940,
+  "suelo_mv": 1560,
   "suelo_pct": 54,
-  "termistor_raw": null,
+  "termistor_raw": 1820,
+  "termistor_mv": 1470,
+  "temp_ntc_c": 23.8,
   "condicion_codigo": 1,
   "condicion_etiqueta": "saludable",
+  "etiqueta_origen": "manual",
   "wifi_rssi": -58,
   "errores": []
 }
@@ -174,13 +182,15 @@ GET /api/v1/mediciones.csv
 5. Seleccionar el repositorio `maceta-inteligente`.
 6. Esperar el primer build.
 
-Railway debe detectar Python mediante `requirements.txt` y utilizar la configuración de `railway.json`.
+Railway construye con el **Dockerfile** del backend, según `backend/railway.json`.
+En **Settings → Root Directory** hay que poner `backend`, o no lo encuentra.
 
-El comando configurado para iniciar la aplicación es:
+El arranque lo define el `ENTRYPOINT` de la imagen: aplica las migraciones
+pendientes y después levanta uvicorn en el `$PORT` que inyecta Railway.
 
-```text
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
+> La primera vez hay que correr `railway run alembic stamp 0001`, porque la
+> base ya tiene la tabla `mediciones` creada por el código viejo. Ver
+> [backend/README.md](../backend/README.md).
 
 El healthcheck configurado es:
 
@@ -216,7 +226,7 @@ DATABASE_URL=referencia al servicio PostgreSQL
 
 Marcar `DEVICE_TOKEN` como variable sellada cuando la interfaz lo permita.
 
-El mismo valor de `DEVICE_TOKEN` deberá colocarse después en `firmware/secrets.h`. No publicarlo en capturas, mensajes grupales o commits.
+El mismo valor de `DEVICE_TOKEN` deberá colocarse después en `firmware/include/secrets.h`. No publicarlo en capturas, mensajes grupales o commits.
 
 ## 8. Generar la URL pública
 
@@ -255,7 +265,7 @@ Si esta prueba falla, corregir primero Railway o PostgreSQL. No modificar sensor
 
 ## 10. Preparar los secretos de la ESP32
 
-Dentro de `firmware/`, copiar:
+Dentro de `firmware/include/`, copiar:
 
 ```text
 secrets.example.h -> secrets.h
@@ -309,10 +319,10 @@ No utilizar `delay()` largos para controlar el intervalo de envío. Utilizar `mi
 
 ## 12. Comportamiento del botón
 
-Configurar GPIO19 así:
+Configurar GPIO13 así:
 
 ```cpp
-pinMode(19, INPUT_PULLUP);
+pinMode(13, INPUT_PULLUP);
 ```
 
 Comportamiento sugerido:
