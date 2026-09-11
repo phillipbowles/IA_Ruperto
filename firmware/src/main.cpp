@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -8,6 +9,10 @@
 #include <Preferences.h>
 #include <time.h>
 #include "secrets.h"
+
+// Versión del firmware: viaja en cada muestra para poder separar en el análisis
+// los datos tomados antes y después de un cambio de calibración o de lógica.
+#define FW_VERSION "1.1.0"
 
 // ─── Pines (fijo, ver CLAUDE.md — no cambiar) ─────────────────────────────
 #define PIN_LUZ          34
@@ -32,9 +37,25 @@
 #define PULSACION_LARGA    2000UL
 
 // ─── Calibración sensores ──────────────────────────────────────────────────
+// OJO: el ADC del ESP32 con atenuación 11 dB satura cerca de 3100 mV y la curva
+// se aplasta arriba de ~2500 mV, así que luz_pct nunca llega a 100 y está
+// comprimido en el extremo de luz fuerte. Es un valor de referencia para el LCD:
+// el análisis usa luz_raw y luz_mv, que ahora sí viajan crudos. Ver docs/CALIBRACION.md.
 #define LUZ_MV_MAX      3300
-#define SUELO_MV_SECO   2800   // ajustar midiendo el sustrato seco
-#define SUELO_MV_MOJADO 1000   // ajustar midiendo el sustrato húmedo
+
+// Sonda de suelo RESISTIVA (tipo YL-69/HL-69, dos púas + plaquita LM393).
+// Seco = alta resistencia = AO cerca del riel; mojado = AO bajo. Por eso
+// SECO > MOJADO. Los dos valores están PENDIENTES de medir con el sustrato real.
+#define SUELO_MV_SECO   2800   // PENDIENTE: medir con el sustrato real seco
+#define SUELO_MV_MOJADO 1000   // PENDIENTE: medir con el sustrato real saturado
+
+// NO SUBIR este valor. En una sonda resistiva el divisor se asienta en
+// microsegundos: los 100 ms son margen de sobra. Lo que sí pasa mientras hay
+// tensión aplicada es electrólisis — los iones migran y la lectura deriva hacia
+// abajo de forma continua, así que alargar la estabilización empeora el dato y
+// corroe más rápido los electrodos. Lo que importa es que el tiempo sea SIEMPRE
+// el mismo, para que la deriva sea igual en todas las muestras.
+#define SUELO_MS_ESTAB   100
 
 // NTC — divisor: VCC → R_FIJO → VOUT → NTC → GND
 #define NTC_R_FIJO  10000.0f
@@ -42,6 +63,13 @@
 #define NTC_T0        298.15f
 #define NTC_BETA     3950.0f
 #define NTC_VCC      3300.0f
+
+// ─── Hora ─────────────────────────────────────────────────────────────────
+// La placa sincroniza NTP en UTC (offset 0) y el timestamp viaja como unix
+// epoch. La conversión a hora local se hace recién en el front. Mezclar horas
+// locales entre placa, servidor y el timelapse del celular es fuente de errores
+// al cruzar las series.
+#define EPOCH_MINIMO_VALIDO 1735689600UL   // 2025-01-01 — corte de cordura
 
 // ─── Objetos globales ──────────────────────────────────────────────────────
 DHT              dht(PIN_DHT, DHT_TYPE);
@@ -67,12 +95,21 @@ int           condicion    = 0;
 uint32_t      boot_id      = 0;
 uint32_t      n_muestra    = 0;
 bool          forzar_envio = false;
+// Distingue la muestra donde Manuel realmente observó la planta (manual) de las
+// que heredan esa etiqueta hasta la próxima pulsación (propagada). Sin esto, en
+// el análisis no se puede saber qué filas son observación y cuáles son relleno.
+bool          etiqueta_nueva = false;
 unsigned long t_lectura    = 0;
 unsigned long t_envio      = 0;
 unsigned long t_boton_down = 0;
 bool          boton_prev   = false;
 String        estado_nube  = "---";
 Sensores      s;
+
+// ─── Hora sincronizada? ───────────────────────────────────────────────────
+bool hora_valida() {
+  return time(nullptr) > (time_t)EPOCH_MINIMO_VALIDO;
+}
 
 // ─── ADC: mediana de 9 muestras ──────────────────────────────────────────
 LectADC mediana9(uint8_t pin) {
@@ -129,7 +166,7 @@ void leer_sensores() {
 
   // Sonda de suelo — alimentar GPIO33 solo mientras se mide
   digitalWrite(PIN_SUELO_VCC, HIGH);
-  delay(100);
+  delay(SUELO_MS_ESTAB);
   LectADC suelo = mediana9(PIN_SUELO_AO);
   digitalWrite(PIN_SUELO_VCC, LOW);
   s.suelo_raw = suelo.raw;
@@ -171,7 +208,7 @@ bool conectar_wifi() {
   Serial.println();
   bool ok = WiFi.status() == WL_CONNECTED;
   if (ok) {
-    configTime(-3*3600, 0, "pool.ntp.org", "time.nist.gov");
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");   // UTC — ver nota de Hora
     Serial.println("IP: " + WiFi.localIP().toString());
   } else {
     WiFi.disconnect(false);  // detiene intento activo sin crashear al reconectar
@@ -193,9 +230,16 @@ bool enviar() {
   http.setTimeout(15000);
 
   JsonDocument doc;
-  doc["dispositivo"]    = "maceta-01";
-  doc["numero_muestra"] = n_muestra;
-  doc["boot_id"]        = boot_id;
+  doc["dispositivo"]       = "maceta-01";
+  doc["numero_muestra"]    = n_muestra;
+  doc["boot_id"]           = boot_id;
+  doc["firmware_version"]  = FW_VERSION;
+
+  // Hora de la placa: sin esto no se puede cruzar con el timelapse del celular
+  // ni detectar el retardo de red. Va en unix epoch UTC.
+  if (hora_valida()) doc["ts_dispositivo_unix"] = (uint32_t)time(nullptr);
+  else               doc["ts_dispositivo_unix"] = nullptr;
+
   if (s.dht_ok) {
     doc["temperatura_c"]        = roundf(s.temp_dht * 10) / 10.0f;
     doc["humedad_ambiente_pct"] = roundf(s.hum_aire);
@@ -203,16 +247,39 @@ bool enviar() {
     doc["temperatura_c"]        = nullptr;
     doc["humedad_ambiente_pct"] = nullptr;
   }
-  doc["luz_raw"]  = s.luz_raw;
-  doc["luz_pct"]  = (int)s.luz_pct;
+
+  // Crudo + convertido para cada canal analógico (CLAUDE.md: guardar siempre los dos)
+  doc["luz_raw"]   = s.luz_raw;
+  doc["luz_mv"]    = (int)s.luz_mv;
+  doc["luz_pct"]   = (int)s.luz_pct;
   doc["suelo_raw"] = s.suelo_raw;
+  doc["suelo_mv"]  = (int)s.suelo_mv;
   doc["suelo_pct"] = (int)s.suelo_pct;
-  if (s.ntc_ok) doc["termistor_raw"] = s.ntc_raw;
-  else          doc["termistor_raw"] = nullptr;
+  if (s.ntc_ok) {
+    doc["termistor_raw"] = s.ntc_raw;
+    doc["termistor_mv"]  = (int)s.ntc_mv;
+    doc["temp_ntc_c"]    = roundf(s.temp_ntc * 10) / 10.0f;
+  } else {
+    doc["termistor_raw"] = s.ntc_raw;          // el crudo sirve para diagnosticar
+    doc["termistor_mv"]  = (int)s.ntc_mv;
+    doc["temp_ntc_c"]    = nullptr;            // celda vacía, nunca 0
+  }
+
   doc["condicion_codigo"]   = condicion;
   doc["condicion_etiqueta"] = ETIQUETAS[condicion];
+  doc["etiqueta_origen"]    = etiqueta_nueva ? "manual" : "propagada";
   doc["wifi_rssi"] = WiFi.RSSI();
-  doc["errores"].to<JsonArray>();
+
+  // Diagnóstico real: si un sensor falló hay que poder saber por qué, no solo
+  // encontrar la celda vacía dos semanas después.
+  JsonArray errores = doc["errores"].to<JsonArray>();
+  if (!s.dht_ok)      errores.add("dht_sin_respuesta");
+  if (!s.ntc_ok)      errores.add("ntc_fuera_de_rango");
+  if (!hora_valida()) errores.add("hora_sin_sincronizar");
+  // Detecta saturación contra los rieles del ADC (no detecta desconexión: un pin
+  // flotante del ESP32 lee ruido, no cero).
+  if (s.luz_raw   <= 0 || s.luz_raw   >= 4095) errores.add("luz_saturada");
+  if (s.suelo_raw <= 0 || s.suelo_raw >= 4095) errores.add("suelo_saturado");
 
   String body;
   serializeJson(doc, body);
@@ -222,16 +289,16 @@ bool enviar() {
   int code = http.POST(body);
   http.end();
 
-  if (code == 201) {
-    estado_nube = "OK#" + String(n_muestra);
-    Serial.println("201 guardado");
+  if (code == 201 || code == 200) {
+    if (code == 201) {
+      estado_nube = "OK#" + String(n_muestra);
+      Serial.println("201 guardado");
+    } else {
+      estado_nube = "DUP";
+      Serial.println("200 duplicado — avanzando contador");
+    }
     prefs.putUInt("n_muestra", ++n_muestra);
-    return true;
-  }
-  if (code == 200) {
-    estado_nube = "DUP";
-    Serial.println("200 duplicado — avanzando contador");
-    prefs.putUInt("n_muestra", ++n_muestra);
+    etiqueta_nueva = false;   // la observación manual ya quedó registrada
     return true;
   }
   // 401 token malo | 422 JSON inválido | 5xx error servidor
@@ -250,8 +317,13 @@ void manejar_boton() {
   } else if (!presionado && boton_prev) {
     unsigned long dur = ms - t_boton_down;
     if (dur >= DEBOUNCE_MS && dur < PULSACION_LARGA) {
-      condicion = (condicion + 1) % N_COND;
-      Serial.printf("Cond → %s\n", ETIQUETAS[condicion]);
+      condicion      = (condicion + 1) % N_COND;
+      etiqueta_nueva = true;
+      // Persistido: sin esto, cualquier corte de luz devolvía la etiqueta a
+      // sin_etiquetar en silencio y el semáforo quedaba en rojo hasta que
+      // alguien pasara por la maceta.
+      prefs.putInt("condicion", condicion);
+      Serial.printf("Cond → %s (manual)\n", ETIQUETAS[condicion]);
       actualizar_semaforo();
     } else if (dur >= PULSACION_LARGA) {
       Serial.println("Envio forzado por boton");
@@ -265,7 +337,7 @@ void manejar_boton() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\n=== PlantaIa boot ===");
+  Serial.println("\n=== PlantaIa boot — fw " FW_VERSION " ===");
 
   pinMode(PIN_LED_VERDE,    OUTPUT);
   pinMode(PIN_LED_AMARILLO, OUTPUT);
@@ -285,8 +357,10 @@ void setup() {
   prefs.begin("maceta", false);
   n_muestra = prefs.getUInt("n_muestra", 0);
   boot_id   = prefs.getUInt("boot_id",   0) + 1;
+  condicion = prefs.getInt("condicion",  0);   // sobrevive a los reinicios
   prefs.putUInt("boot_id", boot_id);
-  Serial.printf("boot_id=%u  n_muestra=%u\n", boot_id, n_muestra);
+  Serial.printf("boot_id=%u  n_muestra=%u  condicion=%s\n",
+                boot_id, n_muestra, ETIQUETAS[condicion]);
 
   actualizar_semaforo();
 
@@ -325,7 +399,7 @@ void loop() {
     lcd.setCursor(0, 1);
     snprintf(buf, sizeof(buf), "n=%u boot=%u", n_muestra, boot_id);
     lcd.print(buf);
-    delay(2000);
+    delay(2000);   // PENDIENTE: pasar a máquina de estados, bloquea el botón
     lcd.clear();
     actualizar_lcd();
   }
