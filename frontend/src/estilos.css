@@ -1,0 +1,75 @@
+/* Estilos mínimos del scaffold. Cuando entre Tailwind + shadcn (ver
+   docs/ARQUITECTURA.md §9) esto se reemplaza. */
+:root {
+  --fondo: #f6f7f5;
+  --panel: #ffffff;
+  --texto: #1b2420;
+  --tenue: #6b7a73;
+  --borde: #dde3df;
+  --ok: #2f8f4e;
+  --mal: #b5422f;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #121815; --panel: #1a221e; --texto: #e8ede9;
+    --tenue: #8a9a92; --borde: #2a342e;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.pagina { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+.cabecera h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
+.subtitulo { margin: 2px 0 0; color: var(--tenue); font-size: 0.9rem; }
+.aviso { color: var(--tenue); }
+.aviso--error { color: var(--mal); }
+
+.estado {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 20px; padding: 14px 16px;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
+}
+.estado p { margin: 2px 0 0; color: var(--tenue); font-size: 0.85rem; }
+.estado__punto {
+  width: 10px; height: 10px; flex: none;
+  border-radius: 50%; background: var(--ok);
+}
+.estado--offline .estado__punto { background: var(--mal); }
+.alerta { color: var(--mal); }
+
+.grilla {
+  display: grid; gap: 10px; margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.dato {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
+}
+.dato__etiqueta {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--tenue);
+}
+.dato__valor { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.dato__valor small { font-size: 0.8rem; color: var(--tenue); margin-left: 2px; }
+.dato__crudo { font-size: 0.75rem; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.vacio { color: var(--tenue); font-size: 0.9rem; }
+
+.etiqueta-actual, .errores {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 16px; padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
+}
+.errores { display: block; }
+.errores ul { margin: 6px 0 0; padding-left: 18px; color: var(--mal); }
+.pill {
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--fondo); border: 1px solid var(--borde);
+  font-size: 0.75rem; color: var(--tenue);
+}
+.pie { margin-top: 24px; color: var(--tenue); font-size: 0.8rem; }
