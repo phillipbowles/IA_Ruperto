@@ -36,6 +36,10 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 # Sin el filtro, envsubst se comería también las variables propias de nginx
 # ($host, $uri, $upstream...). Solo se expanden estas tres.
 ENV NGINX_ENVSUBST_FILTER='^(BACKEND_URL|PORT|NGINX_LOCAL_RESOLVERS)$'
+# El script 15-local-resolvers.envsh de la imagen oficial, que exporta
+# NGINX_LOCAL_RESOLVERS leyendo /etc/resolv.conf, es opt-in: sin esta variable
+# hace `return 0` y el resolver del template queda sin expandir.
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 # Defaults para correr la imagen sola; en Railway los pisan las variables del
 # servicio: PORT lo inyecta la plataforma y BACKEND_URL apunta al dominio interno.
 ENV PORT=80
