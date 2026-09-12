@@ -1,20 +1,33 @@
 server {
-    listen       80;
+    # El puerto lo inyecta Railway y enruta a ese mismo valor; en local cae al
+    # 80 que fija el Dockerfile. La linea [::] hace falta porque el edge de
+    # Railway llega por IPv6.
+    listen       ${PORT};
+    listen       [::]:${PORT};
     server_name  _;
     root         /usr/share/nginx/html;
 
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
 
-    # Los assets con hash en el nombre son inmutables; el index.html no, o el
-    # navegador seguiría sirviendo la versión vieja después de un deploy.
+    # Los assets llevan hash en el nombre y son inmutables; el index.html no, o
+    # el navegador seguiria sirviendo la version vieja despues de un deploy.
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
     location /api/ {
-        proxy_pass       ${BACKEND_URL};
+        # Con un host literal en proxy_pass, nginx resuelve una sola vez al
+        # arrancar y se muere si el DNS todavia no responde — que es justo lo
+        # que pasa con *.railway.internal, que tarda en estar listo. Poniendo la
+        # URL en una variable, la resolucion pasa a ser por request.
+        # NGINX_LOCAL_RESOLVERS lo exporta el propio entrypoint de la imagen
+        # oficial leyendo /etc/resolv.conf.
+        resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+        set $upstream ${BACKEND_URL};
+        proxy_pass $upstream$request_uri;
+
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;

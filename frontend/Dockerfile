@@ -33,7 +33,11 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # El entrypoint de la imagen oficial expande las variables de los .template
 # en /etc/nginx/templates y deja el resultado en /etc/nginx/conf.d.
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
-# Sin el filtro, envsubst se comería también las variables propias de nginx.
-ENV NGINX_ENVSUBST_FILTER=BACKEND_URL
+# Sin el filtro, envsubst se comería también las variables propias de nginx
+# ($host, $uri, $upstream...). Solo se expanden estas tres.
+ENV NGINX_ENVSUBST_FILTER='^(BACKEND_URL|PORT|NGINX_LOCAL_RESOLVERS)$'
+# Defaults para correr la imagen sola; en Railway los pisan las variables del
+# servicio: PORT lo inyecta la plataforma y BACKEND_URL apunta al dominio interno.
+ENV PORT=80
 ENV BACKEND_URL=http://backend:8000
 EXPOSE 80
