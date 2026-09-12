@@ -33,8 +33,11 @@ USER planta
 
 EXPOSE 8000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-# --host :: y no 0.0.0.0: la red privada de Railway es IPv6, y escuchando solo
-# en IPv4 el front no puede alcanzar al backend por *.railway.internal. En Linux
-# el socket IPv6 tambien acepta IPv4, asi que no se pierde nada.
+# 0.0.0.0 y no ::. La tentacion es usar :: para cubrir las dos familias, pero
+# asyncio pone IPV6_V6ONLY=1 en todo socket IPv6, asi que uvicorn con :: acepta
+# SOLO IPv6: la red privada de Railway entra, pero el edge publico llega por
+# IPv4 y se come un RST -> 502. Y el publico es el que necesita la ESP32.
+# El front no pierde nada: le apuntamos BACKEND_URL a la URL publica.
+# Para servir ambas familias haria falta gunicorn con dos -b; no vale la pena.
 # Railway inyecta $PORT; en local cae a 8000. sh -c para que la variable expanda.
-CMD ["sh", "-c", "uvicorn app.main:app --host :: --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
