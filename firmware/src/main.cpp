@@ -16,14 +16,14 @@
 
 // ─── Pines (fijo, ver CLAUDE.md — no cambiar) ─────────────────────────────
 #define PIN_LUZ          34
-#define PIN_TERMISTOR    35
-#define PIN_SUELO_AO     32
+#define PIN_TERMISTOR    32   // cableado real confirmado por tacto 2026-09-12 (antes 35)
+#define PIN_SUELO_AO     35   // cableado real confirmado por tacto 2026-09-12 (antes 32)
 #define PIN_SUELO_VCC    33
 #define PIN_DHT           4
 #define PIN_LED_VERDE    27
 #define PIN_LED_AMARILLO 26
 #define PIN_LED_ROJO     25
-#define PIN_BOTON        13
+#define PIN_BOTON        19   // cableado real confirmado 2026-09-12 (antes 13)
 
 // ─── Parámetros generales ──────────────────────────────────────────────────
 #define DHT_TYPE           DHT11
@@ -58,8 +58,15 @@
 #define SUELO_MS_ESTAB   100
 
 // NTC — divisor: VCC → R_FIJO → VOUT → NTC → GND
+// NTC_R0 calibrado en punto único 2026-09-12 contra el DHT11 (21.0C real con
+// termistor_mv=1096 en simultáneo, antes daba 41.6C con R0=10000). El R_FIJO
+// real de la plaqueta KS0033 no coincide con el nominal de 10k asumido acá;
+// en vez de adivinarlo, se ajustó R0 para que la curva pase por ese punto.
+// Es calibración de un solo punto: confiable cerca de temperatura ambiente,
+// pero para precisión en todo el rango (heladera, sol directo, etc.) hace
+// falta un segundo punto de referencia — ver docs/CALIBRACION.md.
 #define NTC_R_FIJO  10000.0f
-#define NTC_R0      10000.0f
+#define NTC_R0       4150.0f
 #define NTC_T0        298.15f
 #define NTC_BETA     3950.0f
 #define NTC_VCC      3300.0f
@@ -83,7 +90,7 @@ struct Sensores {
   float temp_dht, hum_aire;
   int   luz_raw;    float luz_mv,   luz_pct;
   int   ntc_raw;    float ntc_mv,   temp_ntc;
-  int   suelo_raw;  float suelo_mv, suelo_pct;
+  int   suelo_raw;  float suelo_mv;
   bool  dht_ok, ntc_ok;
 };
 
@@ -150,7 +157,7 @@ void leer_sensores() {
   s.luz_mv  = luz.mv;
   s.luz_pct = constrain((int)((float)luz.mv * 100 / LUZ_MV_MAX), 0, 100);
 
-  // NTC — GPIO35
+  // NTC — GPIO32
   LectADC ntc = mediana9(PIN_TERMISTOR);
   s.ntc_raw = ntc.raw;
   s.ntc_mv  = ntc.mv;
@@ -171,8 +178,9 @@ void leer_sensores() {
   digitalWrite(PIN_SUELO_VCC, LOW);
   s.suelo_raw = suelo.raw;
   s.suelo_mv  = suelo.mv;
-  s.suelo_pct = constrain(
-    (int)map((long)suelo.mv, SUELO_MV_MOJADO, SUELO_MV_SECO, 100, 0), 0, 100);
+  // suelo_pct queda sin calcular hasta calibrar SUELO_MV_SECO/MOJADO con el
+  // sustrato real (ver docs/CALIBRACION.md) — mandar un % inventado es peor
+  // que no mandar nada.
 }
 
 // ─── Semáforo ─────────────────────────────────────────────────────────────
@@ -189,7 +197,7 @@ void actualizar_lcd() {
     snprintf(l0, sizeof(l0), "T:%.1fC H:%.0f%%", s.temp_dht, s.hum_aire);
   else
     snprintf(l0, sizeof(l0), "T:--- H:---     ");
-  snprintf(l1, sizeof(l1), "S:%.0f%% %-7s", s.suelo_pct, estado_nube.c_str());
+  snprintf(l1, sizeof(l1), "S:%.0fmv %-6s", s.suelo_mv, estado_nube.c_str());
 
   lcd.setCursor(0, 0); lcd.print(l0);
   lcd.setCursor(0, 1); lcd.print(l1);
@@ -254,7 +262,7 @@ bool enviar() {
   doc["luz_pct"]   = (int)s.luz_pct;
   doc["suelo_raw"] = s.suelo_raw;
   doc["suelo_mv"]  = (int)s.suelo_mv;
-  doc["suelo_pct"] = (int)s.suelo_pct;
+  // suelo_pct no se manda: sin calibrar sería un valor inventado (ver leer_sensores).
   if (s.ntc_ok) {
     doc["termistor_raw"] = s.ntc_raw;
     doc["termistor_mv"]  = (int)s.ntc_mv;
@@ -382,8 +390,9 @@ void loop() {
     t_lectura = ahora;
     leer_sensores();
     actualizar_lcd();
-    Serial.printf("[%lu] T:%.1f H:%.0f Luz:%.0f%% Suelo:%.0f%% Cond:%s\n",
-      ahora/1000, s.temp_dht, s.hum_aire, s.luz_pct, s.suelo_pct, ETIQUETAS[condicion]);
+    Serial.printf("[%lu] T:%.1f H:%.0f Luz:%.0f%% Suelo(raw:%d mv:%.0f) Termistor(raw:%d mv:%.0f %.1fC) Cond:%s\n",
+      ahora/1000, s.temp_dht, s.hum_aire, s.luz_pct, s.suelo_raw, s.suelo_mv,
+      s.ntc_raw, s.ntc_mv, s.temp_ntc, ETIQUETAS[condicion]);
   }
 
   if (ahora - t_envio >= INTERVALO_ENVIO || forzar_envio) {

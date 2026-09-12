@@ -54,18 +54,23 @@ La placa va enchufada a un cargador de pared, no a la notebook.
 
 ## Mapa de pines (fijo, no cambiar)
 
+Verificado contra el cableado físico real el 2026-09-12 (por tacto: se
+identificó cuál sensor cambia al humedecerlo/calentarlo con el dedo mirando
+el Serial en vivo). Corrige una versión anterior que tenía temperatura y
+suelo cruzados entre GPIO32/35, y el botón en 13 en vez de 19.
+
 | Señal | GPIO | Notas |
 |---|---|---|
 | Luz (LDR Keyestudio KS0028) | 34 | analógico, ADC1, solo entrada |
-| Temperatura (termistor KS0033) | 35 | analógico, ADC1, solo entrada |
-| Humedad de suelo — señal | 32 | analógico, ADC1 |
+| Temperatura (termistor KS0033) | 32 | analógico, ADC1 |
+| Humedad de suelo — señal | 35 | analógico, ADC1, solo entrada |
 | Humedad de suelo — VCC | 33 | alimentada por GPIO **solo durante la lectura** |
 | DHT11 | 4 | humedad + temperatura del aire |
 | LCD I2C (0x27) — SDA / SCL | 21 / 22 | lógica 3,3 V |
 | LED semáforo **rojo** | 25 | con resistencia de 220–330 Ω |
 | LED semáforo **amarillo** | 26 | idem |
 | LED semáforo **verde** | 27 | idem |
-| Botón | 13 | `INPUT_PULLUP`, a GND; marca observación manual |
+| Botón | 19 | `INPUT_PULLUP`, a GND; marca observación manual |
 
 ## Restricciones duras
 

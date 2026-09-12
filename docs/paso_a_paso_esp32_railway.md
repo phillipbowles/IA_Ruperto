@@ -38,7 +38,7 @@ Comprobar antes de continuar:
 - Todos los módulos comparten GND.
 - Los sensores analógicos reciben 3,3 V.
 - Cada LED tiene una resistencia de 220 a 330 ohmios.
-- El botón está entre GPIO13 y GND, no entre GPIO13 y 3,3 V.
+- El botón está entre el GPIO del botón (ver CLAUDE.md) y GND, no contra 3,3 V.
 - La sonda de suelo recibe VCC desde GPIO33, no desde el riel de 3V3.
 - La fuente USB es estable y el cable está en buenas condiciones.
 - El lugar dispone de Wi-Fi de 2,4 GHz sin portal cautivo.
@@ -319,10 +319,10 @@ No utilizar `delay()` largos para controlar el intervalo de envío. Utilizar `mi
 
 ## 12. Comportamiento del botón
 
-Configurar GPIO13 así:
+Configurar el GPIO del botón (ver CLAUDE.md) así:
 
 ```cpp
-pinMode(13, INPUT_PULLUP);
+pinMode(PIN_BOTON, INPUT_PULLUP);
 ```
 
 Comportamiento sugerido:
