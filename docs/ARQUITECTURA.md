@@ -293,11 +293,11 @@ migrar y el segundo proceso espera.
 forma más rápida de que el esquema de local y el de producción se separen sin
 que nadie se entere.
 
-> ⚠️ **La base de Railway ya tiene la tabla `mediciones`**, creada por
-> `create_all()` antes de que hubiera migraciones. Antes del primer deploy con
-> Alembic hay que correr `railway run alembic stamp 0001` una sola vez, o la
-> revisión inicial va a fallar intentando crear una tabla que ya existe. El
-> detalle está en [backend/README.md](../backend/README.md).
+> ⚠️ **Antes del primer deploy con Alembic, verificar si `mediciones` ya existe
+> en la base de Railway.** Si la creó `create_all()`, hay que correr
+> `railway run alembic stamp 0001` una sola vez o la revisión inicial falla
+> intentando crear una tabla que ya está. El árbol de decisión está en
+> [backend/README.md](../backend/README.md).
 
 > ⚠️ **Railway: Settings → Root Directory = `backend`.** Sin eso no encuentra el
 > Dockerfile ni el `railway.json`.

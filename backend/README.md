@@ -41,17 +41,29 @@ operaciones pendientes, alguien tocó `models.py` sin generar la migración.
 
 ### Primera vez sobre la base de Railway
 
-La base de producción ya tiene la tabla `mediciones`, creada por `create_all()`
-antes de que existieran las migraciones. Alembic no lo sabe y va a intentar
-crearla de nuevo. Hay que marcar la revisión inicial como aplicada **una sola
-vez**, antes del primer deploy con migraciones:
+Depende de si la tabla `mediciones` ya existe en producción. Para saberlo:
 
 ```bash
-railway run alembic stamp 0001
+railway connect Postgres
+\dt
 ```
 
-A partir de ahí `upgrade head` aplica 0002 en adelante con normalidad. Este paso
-no hace falta en local: la base del compose nace vacía y corre la cadena entera.
+- **Si `mediciones` NO aparece** (el caso al 2026-09-11: el servicio del backend
+  tuvo un solo deploy y falló, así que `create_all()` nunca llegó a correr):
+  no hay que hacer nada. `alembic upgrade head` crea la cadena entera.
+
+- **Si `mediciones` SÍ aparece** pero no hay tabla `alembic_version`: la creó
+  `create_all()` antes de que existieran las migraciones. Alembic no lo sabe y
+  va a intentar crearla de nuevo. Hay que marcar la revisión inicial como
+  aplicada **una sola vez**, antes del primer deploy con migraciones:
+
+  ```bash
+  railway run alembic stamp 0001
+  ```
+
+  A partir de ahí `upgrade head` aplica 0002 en adelante con normalidad.
+
+En local nunca hace falta: la base del compose nace vacía y corre todo.
 
 ## Variables de entorno
 
