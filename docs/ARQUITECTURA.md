@@ -246,7 +246,7 @@ que se despliega en Railway es **la misma imagen** que probaste en local.
 | Capa | Runtime | Dependencias | Imagen | Despliegue |
 |---|---|---|---|---|
 | firmware | Arduino core 2.0.x (`espressif32@6.9.0`) | `platformio.ini`, versiones fijas | — | `pio run -t upload` |
-| backend | Python 3.11 | `pyproject.toml` (+ extras `[dev]`, `[ml]`) | `python:3.11-slim`, targets `dev`/`prod` | Railway, builder `DOCKERFILE` |
+| backend | Python 3.11 | `pyproject.toml` (+ extras `[dev]`, `[ml]`) | `python:3.11-slim`, targets `dev`/`prod` | Railway, Root Directory `backend` |
 | base | Postgres 16 | — | `postgres:16-alpine` | Railway Postgres |
 | frontend | Node 20 | `package.json` | `node:20-alpine` → `nginx:1.27-alpine` | Railway o Vercel |
 | notebooks | el venv del backend | `pip install -e "backend/[ml]"` | — | — |
@@ -282,12 +282,16 @@ levantar uvicorn. Tres decisiones detrás de eso:
   corre contra una base que todavía no acepta conexiones y el primer arranque
   muere.
 
-En **producción** el que manda es el `preDeployCommand` de `railway.json`: corre
+En **producción** el que manda es el `preDeployCommand` del servicio: corre
 `alembic upgrade head` una sola vez antes de que la instancia nueva tome
 tráfico, y si falla **aborta el deploy** dejando la versión vieja sirviendo —
 mejor que el entrypoint, que solo puede negarse a arrancar. Los dos caminos
 pueden solaparse, así que `env.py` toma un advisory lock de Postgres antes de
 migrar y el segundo proceso espera.
+
+`railway.json` no existe más en el repo: Railway lo deprecó y lo ignora en
+silencio, que es peor que no tenerlo. Los settings viven en el servicio; están
+listados en [backend/README.md](../backend/README.md).
 
 `create_all()` ya no existe en el código: dos mecanismos creando tablas es la
 forma más rápida de que el esquema de local y el de producción se separen sin
@@ -299,8 +303,9 @@ que nadie se entere.
 > intentando crear una tabla que ya está. El árbol de decisión está en
 > [backend/README.md](../backend/README.md).
 
-> ⚠️ **Railway: Settings → Root Directory = `backend`.** Sin eso no encuentra el
-> Dockerfile ni el `railway.json`.
+> ⚠️ **Railway: Settings → Root Directory = `backend`** (y `frontend` para el
+> otro servicio). Sin eso Railway busca en la raíz del repo, no encuentra la app
+> y el build falla.
 
 ### Reglas que valen para las tres capas
 
