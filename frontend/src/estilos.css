@@ -1,75 +1,174 @@
-/* Estilos mínimos del scaffold. Cuando entre Tailwind + shadcn (ver
-   docs/ARQUITECTURA.md §9) esto se reemplaza. */
+/* Tokens. El palette categórico está validado para CVD (ver dataviz):
+   blue / orange / aqua, en ese orden fijo. Los neutros llevan un sesgo frío
+   hacia el azul del acento para que no lean como gris de plantilla. */
 :root {
-  --fondo: #f6f7f5;
-  --panel: #ffffff;
-  --texto: #1b2420;
-  --tenue: #6b7a73;
-  --borde: #dde3df;
-  --ok: #2f8f4e;
-  --mal: #b5422f;
-  color-scheme: light dark;
+  color-scheme: light;
+  --fondo:        #f4f6f8;
+  --panel:        #fcfcfb;
+  --panel-alt:    #eef1f5;
+  --borde:        #dde3ea;
+  --borde-suave:  #e8ecf1;
+  --texto:        #0b0b0b;
+  --texto-2:      #52514e;
+  --texto-3:      #8a8f96;
+
+  --serie-1: #2a78d6;   /* azul   — luz, series primarias */
+  --serie-2: #eb6834;   /* naranja— suelo */
+  --serie-3: #1baf7a;   /* aqua   — humedad del aire */
+  --serie-4: #eda100;
+
+  --ok:      #1baf7a;
+  --alerta:  #eda100;
+  --malo:    #e34948;
+  --noche:   #2a78d6;   /* usado con opacidad baja para las bandas */
+
+  --grid:    #e4e9ef;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --fondo: #121815; --panel: #1a221e; --texto: #e8ede9;
-    --tenue: #8a9a92; --borde: #2a342e;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --fondo:       #111417;
+    --panel:       #1a1a19;
+    --panel-alt:   #21252a;
+    --borde:       #2b3138;
+    --borde-suave: #242a30;
+    --texto:       #ffffff;
+    --texto-2:     #c3c2b7;
+    --texto-3:     #8a9098;
+
+    --serie-1: #3987e5;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --serie-4: #c98500;
+
+    --ok:     #199e70;
+    --alerta: #c98500;
+    --malo:   #e66767;
+    --noche:  #3987e5;
+    --grid:   #272d34;
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fondo:       #111417;
+  --panel:       #1a1a19;
+  --panel-alt:   #21252a;
+  --borde:       #2b3138;
+  --borde-suave: #242a30;
+  --texto:       #ffffff;
+  --texto-2:     #c3c2b7;
+  --texto-3:     #8a9098;
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --ok:     #199e70;
+  --alerta: #c98500;
+  --malo:   #e66767;
+  --noche:  #3987e5;
+  --grid:   #272d34;
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
   background: var(--fondo);
   color: var(--texto);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-.pagina { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
-.cabecera h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
-.subtitulo { margin: 2px 0 0; color: var(--tenue); font-size: 0.9rem; }
-.aviso { color: var(--tenue); }
-.aviso--error { color: var(--mal); }
 
-.estado {
-  display: flex; align-items: center; gap: 12px;
-  margin-top: 20px; padding: 14px 16px;
-  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
-}
-.estado p { margin: 2px 0 0; color: var(--tenue); font-size: 0.85rem; }
-.estado__punto {
-  width: 10px; height: 10px; flex: none;
-  border-radius: 50%; background: var(--ok);
-}
-.estado--offline .estado__punto { background: var(--mal); }
-.alerta { color: var(--mal); }
+.pagina { max-width: 1180px; margin: 0 auto; padding-block: 24px 64px; padding-inline: 16px; }
 
-.grilla {
-  display: grid; gap: 10px; margin-top: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-.dato {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 12px 14px;
-  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
-}
-.dato__etiqueta {
-  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--tenue);
-}
-.dato__valor { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
-.dato__valor small { font-size: 0.8rem; color: var(--tenue); margin-left: 2px; }
-.dato__crudo { font-size: 0.75rem; color: var(--tenue); font-variant-numeric: tabular-nums; }
-.vacio { color: var(--tenue); font-size: 0.9rem; }
+/* ── cabecera ─────────────────────────────────────────────────────────── */
+.cabecera { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; }
+.cabecera h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.cabecera .sub { margin: 2px 0 0; color: var(--texto-2); font-size: 0.85rem; }
 
-.etiqueta-actual, .errores {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin-top: 16px; padding: 12px 14px;
-  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
-}
-.errores { display: block; }
-.errores ul { margin: 6px 0 0; padding-left: 18px; color: var(--mal); }
-.pill {
-  padding: 2px 8px; border-radius: 999px;
-  background: var(--fondo); border: 1px solid var(--borde);
-  font-size: 0.75rem; color: var(--tenue);
-}
-.pie { margin-top: 24px; color: var(--tenue); font-size: 0.8rem; }
+.estado-placa { display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 999px; font-size: 0.85rem; }
+.punto { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--ok); }
+.punto--off { background: var(--malo); }
+
+/* ── KPIs ─────────────────────────────────────────────────────────────── */
+.kpis { display: grid; gap: 10px; margin-top: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.kpi { padding: 14px 16px; background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; }
+.kpi__et { display: block; font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--texto-3); }
+.kpi__v { display: block; margin-top: 4px; font-size: 1.65rem; line-height: 1.1;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.kpi__v small { font-size: 0.8rem; color: var(--texto-2); margin-left: 3px; letter-spacing: 0; }
+.kpi__pie { display: block; margin-top: 3px; font-size: 0.75rem; color: var(--texto-2); }
+.kpi--alerta .kpi__v { color: var(--malo); }
+
+/* ── aviso de calidad ─────────────────────────────────────────────────── */
+.aviso { margin-top: 20px; padding: 16px 18px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--borde); border-left: 3px solid var(--alerta); }
+.aviso h2 { margin: 0 0 4px; font-size: 0.95rem; }
+.aviso p { margin: 0 0 10px; color: var(--texto-2); font-size: 0.85rem; }
+.aviso ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 10px; }
+.aviso li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 0.86rem; }
+.chip { padding: 1px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; align-self: center; }
+.chip--malo   { background: color-mix(in srgb, var(--malo) 15%, transparent); color: var(--malo); }
+.chip--alerta { background: color-mix(in srgb, var(--alerta) 18%, transparent); color: var(--alerta); }
+
+/* ── paneles y grilla de gráficos ─────────────────────────────────────── */
+.seccion { margin-top: 28px; }
+.seccion > h2 { margin: 0 0 12px; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--texto-3); }
+/* Encabezado de seccion con controles. Sin flex-wrap, el titulo mas los botones
+   no entran en 400px y estiran TODA la pagina: el ancho minimo de un hijo flex
+   empuja al padre, y a partir de ahi el resto del layout se desborda con el. */
+.seccion__cab { display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.seccion__cab h2 { margin: 0; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--texto-3); }
+.grilla { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); }
+/* Dos columnas a partir de tablet: con 4 paneles llenan 2x2 y ninguno queda
+   solo al final de una fila. */
+@media (min-width: 720px) { .grilla { grid-template-columns: repeat(2, 1fr); } }
+.grilla--ancha { grid-template-columns: 1fr; }
+
+.panel { padding: 16px; background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; }
+.panel__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.panel__tit { font-size: 0.9rem; font-weight: 600; }
+.panel__val { font-size: 0.85rem; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.panel__nota { margin: 0 0 10px; font-size: 0.76rem; color: var(--texto-3); }
+.panel__gr { width: 100%; }
+
+/* ── tooltip ──────────────────────────────────────────────────────────── */
+.tt { padding: 8px 10px; background: var(--panel); border: 1px solid var(--borde);
+  border-radius: 8px; font-size: 0.8rem; box-shadow: 0 4px 14px rgb(0 0 0 / 0.10); }
+.tt__t { color: var(--texto-3); font-size: 0.72rem; margin-bottom: 3px; }
+.tt__v { font-variant-numeric: tabular-nums; }
+
+/* ── leyenda del donut ────────────────────────────────────────────────── */
+.leyenda { display: grid; gap: 7px; margin: 10px 0 0; padding: 0; list-style: none; }
+.leyenda li { display: grid; grid-template-columns: 10px 1fr auto; gap: 9px; align-items: center; font-size: 0.82rem; }
+.leyenda i { width: 10px; height: 10px; border-radius: 3px; display: block; }
+.leyenda b { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--texto-2); }
+
+/* ── tabla ────────────────────────────────────────────────────────────── */
+.tabla-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--borde-suave); }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--texto-3); font-weight: 600; }
+td { font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: none; }
+.vacio { color: var(--texto-3); }
+
+/* ── controles ────────────────────────────────────────────────────────── */
+.filtros { display: flex; gap: 6px; flex-wrap: wrap; }
+.filtros button { padding: 5px 12px; font: inherit; font-size: 0.82rem; cursor: pointer;
+  background: var(--panel); color: var(--texto-2);
+  border: 1px solid var(--borde); border-radius: 999px; }
+.filtros button[aria-pressed="true"] { background: var(--serie-1); border-color: var(--serie-1); color: #fff; }
+.filtros button:focus-visible { outline: 2px solid var(--serie-1); outline-offset: 2px; }
+
+.cargando, .error { margin-top: 40px; text-align: center; color: var(--texto-2); }
+.error { color: var(--malo); }
+.pie-pagina { margin-top: 32px; font-size: 0.78rem; color: var(--texto-3); }
