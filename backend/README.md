@@ -84,6 +84,10 @@ En local nunca hace falta: la base del compose nace vacía y corre todo.
 |---|---|
 | `DATABASE_URL` | Postgres. Railway la entrega como referencia al servicio |
 | `DEVICE_TOKEN` | el mismo valor que en `firmware/include/secrets.h` |
+| `PHOTO_READ_TOKEN` | token distinto para listar y descargar fotos |
+| `MAX_PHOTO_BYTES` | límite por JPEG; por defecto 2 MiB |
+| `PHOTO_STORAGE_REQUIRED` | en Railway debe ser `true` para impedir disco efímero |
+| credenciales S3 | inyectadas automáticamente desde el Railway Bucket |
 | `CORS_ORIGENES` | orígenes del front, separados por coma |
 | `PORT` | lo inyecta Railway; en local cae a 8000 |
 
@@ -112,8 +116,17 @@ Settings del servicio Backend en Railway, ya configurados:
 | `PORT` | `8000` | fijo, para que el puerto del dominio sea predecible |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | referencia, no la contraseña copiada |
 | `DEVICE_TOKEN` | el mismo de `firmware/include/secrets.h` | |
+| `PHOTO_READ_TOKEN` | token de lectura de fotos, distinto del dispositivo | |
+| `PHOTO_STORAGE_REQUIRED` | `true` | evita aceptar fotos sin Bucket persistente |
 | `CORS_ORIGENES` | la URL del Frontend | |
 | Healthcheck | `/health` | |
+
+El Bucket inyecta `BUCKET`, `ENDPOINT`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY` y
+`REGION`; también se aceptan sus equivalentes `AWS_*`. Ver
+[`docs/ESP32_CAM.md`](../docs/ESP32_CAM.md).
+
+Railway puede entregar `DATABASE_URL` como `postgresql+psycopg://`; por eso el
+contenedor incluye tanto `psycopg` v3 como `psycopg2`.
 
 ### uvicorn escucha en 0.0.0.0, no en `::`
 

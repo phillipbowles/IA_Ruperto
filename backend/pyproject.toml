@@ -14,8 +14,11 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "alembic>=1.13.0",
     "psycopg2-binary>=2.9.9",
+    # Railway puede entregar DATABASE_URL como postgresql+psycopg://.
+    "psycopg[binary]>=3.2.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
+    "boto3>=1.35.0",
 ]
 
 [project.optional-dependencies]

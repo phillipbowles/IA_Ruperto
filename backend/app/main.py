@@ -1,12 +1,12 @@
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
 load_dotenv()
 
-from .routers import mediciones
+from .routers import fotos, mediciones
 
 # El esquema lo administra Alembic, que corre en el entrypoint del contenedor
 # antes de levantar uvicorn. Ya no se llama a create_all(): dos mecanismos
@@ -21,7 +21,9 @@ app = FastAPI(
 
 # El front corre en otro origen (5173 en local, otro dominio en producción).
 # La placa no necesita CORS: no es un navegador.
-ORIGENES = [o.strip() for o in os.getenv("CORS_ORIGENES", "http://localhost:5173").split(",") if o.strip()]
+ORIGENES = [
+    o.strip() for o in os.getenv("CORS_ORIGENES", "http://localhost:5173").split(",") if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(mediciones.router)
+app.include_router(fotos.router)
 
 
 @app.get("/health", tags=["estado"])
