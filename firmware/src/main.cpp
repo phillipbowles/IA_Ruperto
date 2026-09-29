@@ -31,7 +31,7 @@
 #define LCD_COLS           16
 #define LCD_ROWS            2
 #define INTERVALO_LECTURA  2000UL          // 2 s — actualizar LCD/Serial
-#define INTERVALO_ENVIO   30000UL          // 30 s pruebas → 300000 producción
+#define INTERVALO_ENVIO  300000UL          // 5 min entre envíos
 #define TIMEOUT_WIFI      15000UL
 #define DEBOUNCE_MS          50UL
 #define PULSACION_LARGA    2000UL
