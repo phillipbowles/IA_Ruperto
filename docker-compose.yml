@@ -43,6 +43,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-planta}:${POSTGRES_PASSWORD:-planta}@db:5432/${POSTGRES_DB:-maceta}
       DEVICE_TOKEN:   ${DEVICE_TOKEN:?falta DEVICE_TOKEN — copiá .env.example a .env}
+      PHOTO_READ_TOKEN: ${PHOTO_READ_TOKEN:?falta PHOTO_READ_TOKEN — copiá .env.example a .env}
+      MAX_PHOTO_BYTES: ${MAX_PHOTO_BYTES:-2097152}
+      PHOTO_STORAGE_DIR: ${PHOTO_STORAGE_DIR:-/data/fotos}
       CORS_ORIGENES:  ${CORS_ORIGENES:-http://localhost:5173}
       ENVIRONMENT:    development
     ports:
@@ -53,6 +56,7 @@ services:
       # El paquete instalado en modo editable vive acá dentro; si el bind mount
       # del host lo tapara, el import fallaría.
       - /app/plantaia_backend.egg-info
+      - fotos_local:/data/fotos
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -84,3 +88,4 @@ services:
 volumes:
   datos_pg:
   node_modules:
+  fotos_local:

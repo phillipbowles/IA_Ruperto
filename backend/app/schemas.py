@@ -75,3 +75,24 @@ class MedicionResponse(BaseModel):
     # sin request extra ni features calculadas en la placa. Ver ARQUITECTURA.md.
     prediccion:  Optional[str]   = None
     proba:       Optional[float] = None
+
+
+class FotoOut(BaseModel):
+    id:           int
+    dispositivo:  str
+    numero_foto:  int
+    content_type: str
+    bytes:        int
+    sha256:       str
+    wifi_rssi:    Optional[int]
+    recibido_en:  datetime
+    imagen_url:   str
+
+
+class FotoGuardadaResponse(BaseModel):
+    duplicado:  bool = False
+    id:         int
+    bytes:      int
+    sha256:     str
+    recibido_en: datetime
+    imagen_url: str

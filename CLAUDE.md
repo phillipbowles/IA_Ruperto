@@ -78,9 +78,11 @@ suelo cruzados entre GPIO32/35, y el botón en 13 en vez de 19.
   ESP32 solo tolera 3,3 V → **alimentarlos desde 3V3**, nunca desde 5 V.
 - **ADC2 no funciona con WiFi activo** → todo lo analógico en ADC1 (GPIO 32–39).
 - GPIO 34–39 son solo entrada: no tienen pull-up interno ni salida.
-- **Nada de cámara en esta placa.** El ESP32 clásico no puede ser USB host y la
-  OV2640 por DVP se lleva 13–16 GPIOs. El timelapse lo hace un celular aparte;
-  los dos loggers son independientes y se cruzan después por timestamp.
+- **Nada de cámara en esta placa de sensores.** La cámara usa una segunda placa
+  AI-Thinker ESP32-CAM independiente, con su propio firmware en
+  `firmware/camera/`. Ambas placas publican al mismo backend de Railway y se
+  cruzan por la hora de recepción. No compartir pines ni alimentación entre
+  las dos placas.
 
 ## La sonda de suelo es RESISTIVA
 
@@ -159,6 +161,14 @@ no una tabla**: sale del join de las cuatro en `GET /api/v1/dataset.csv`.
 - `evento`: `riego` | `cambio_luz` | `lampara_on` | `lampara_off`
 - `escena_luz`: `velo_abierto` | `velo_cerrado` | `pantalla` | `lampara`
 - `peso_g`, `foto` y `nota` los carga Manuel desde el front en las observaciones.
+
+## Cámara independiente
+
+La AI-Thinker ESP32-CAM toma un JPEG al arrancar y luego uno cada 5 minutos.
+Busca las dos redes definidas localmente en `firmware/camera/include/secrets.h`
+y sube a `POST /api/v1/fotos`. Los JPEG viven en un Railway Bucket privado; la
+base solo guarda sus metadatos. El firmware y el backend comparten
+`DEVICE_TOKEN`, pero las lecturas usan un `PHOTO_READ_TOKEN` diferente.
 
 ## Secretos
 
