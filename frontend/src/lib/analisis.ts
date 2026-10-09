@@ -1,7 +1,14 @@
 import type { Medicion } from "../tipos";
 
-/** Un hueco mayor a esto corta la serie: la placa dejó de reportar. */
-const HUECO_MS = 5 * 60 * 1000;
+/** Cadencia de envío del protocolo: una muestra cada 5 min (INTERVALO_ENVIO del
+ *  firmware, ver CLAUDE.md). */
+export const INTERVALO_MS = 5 * 60 * 1000;
+/** Un hueco mayor a esto corta la serie: la placa dejó de reportar. Son 3
+ *  intervalos: con 1 solo (o 5 min exactos) cada punto quedaría aislado. */
+export const HUECO_MS = 3 * INTERVALO_MS;
+/** Antes de esto la hora de la placa es de un reloj sin sincronizar (mismo corte
+ *  que EPOCH_MINIMO_VALIDO del firmware). */
+const EPOCH_MINIMO_MS = Date.UTC(2026, 0, 1);
 /** Sin datos por más de esto, la placa se considera caída. */
 export const LIMITE_OFFLINE_MS = 16 * 60 * 1000;
 
@@ -26,7 +33,10 @@ function suelo_pct(mv: number | null): number | null {
 export function prepararSerie(filas: Medicion[]): Punto[] {
   return filas
     .map((m) => {
-      const d = new Date(m.ts_dispositivo ?? m.ts_servidor);
+      // Una hora de placa anterior a 2026 es un reloj sin sincronizar: si se usara,
+      // una sola fila estira el eje de tiempo un año y aplasta todo contra el final.
+      const dev = m.ts_dispositivo ? new Date(m.ts_dispositivo) : null;
+      const d = dev && dev.getTime() >= EPOCH_MINIMO_MS ? dev : new Date(m.ts_servidor);
       return {
         ...m,
         t: d.getTime(),
@@ -174,4 +184,32 @@ export function porHora(puntos: Punto[]): { hora: string; n: number }[] {
   const c = new Array(24).fill(0);
   for (const p of puntos) c[p.hora]++;
   return c.map((n, h) => ({ hora: String(h).padStart(2, "0"), n }));
+}
+
+/** Serie para graficar: promedio por ventana de 5 min (la cadencia del protocolo)
+ *  y un `null` en cada hueco para que la línea se corte en vez de unir con una
+ *  recta dos momentos separados por horas. Si la placa manda cada 5 min no
+ *  cambia nada; si todavía manda cada 30 s, la serie queda con la misma
+ *  densidad y el filtro «Todo» no se vuelve ilegible. */
+export function serieParaGrafico(
+  puntos: Punto[],
+  campo: keyof Punto,
+): { t: number; v: number | null }[] {
+  const ventanas = new Map<number, { suma: number; n: number }>();
+  for (const p of puntos) {
+    const x = p[campo];
+    if (typeof x !== "number") continue;
+    const k = Math.floor(p.t / INTERVALO_MS);
+    const w = ventanas.get(k) ?? { suma: 0, n: 0 };
+    w.suma += x; w.n++;
+    ventanas.set(k, w);
+  }
+  const out: { t: number; v: number | null }[] = [];
+  for (const k of [...ventanas.keys()].sort((a, b) => a - b)) {
+    const t = k * INTERVALO_MS + INTERVALO_MS / 2;
+    const w = ventanas.get(k)!;
+    if (out.length && t - out[out.length - 1].t > HUECO_MS) out.push({ t: t - 1, v: null });
+    out.push({ t, v: Math.round((w.suma / w.n) * 10) / 10 });
+  }
+  return out;
 }

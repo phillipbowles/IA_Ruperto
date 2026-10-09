@@ -2,7 +2,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceArea,
 } from "recharts";
-import type { Punto, Tramo } from "../lib/analisis";
+import { serieParaGrafico, type Punto, type Tramo } from "../lib/analisis";
 import { hora, fechaHora } from "../lib/formato";
 
 interface Props {
@@ -28,9 +28,7 @@ function Tip({ active, payload, unidad, nombre }: any) {
 }
 
 export function GraficoSerie({ puntos, campo, color, unidad, noche = [], dominio = ["auto", "auto"] }: Props) {
-  // null en vez de undefined para que Recharts corte la línea en los huecos en
-  // lugar de unir con una recta dos momentos separados por horas.
-  const datos = puntos.map((p) => ({ t: p.t, v: (p[campo] as number | null) ?? null }));
+  const datos = serieParaGrafico(puntos, campo);
 
   return (
     <ResponsiveContainer width="100%" height={200}>

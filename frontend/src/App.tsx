@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { obtener } from "./api/cliente";
 import type { Medicion } from "./tipos";
 import { prepararSerie, resumir, bandasNoche, porHora } from "./lib/analisis";
-import { duracion, fechaCorta, hace, num } from "./lib/formato";
+import { cadencia, duracion, fechaCorta, hace, num } from "./lib/formato";
 import { Panel, Kpi } from "./componentes/Panel";
 import { GraficoSerie } from "./componentes/GraficoSerie";
 import { BarrasPorHora } from "./componentes/BarrasPorHora";
@@ -20,7 +20,6 @@ const RANGOS = [
 
 export function App() {
   const [rango, setRango] = useState<string>("24h");
-  const [dispositivo, setDispositivo] = useState<string>("maceta-01");
 
   const { data, isPending, error } = useQuery({
     queryKey: ["mediciones"],
@@ -30,16 +29,7 @@ export function App() {
     queryFn: () => obtener<Medicion[]>("/mediciones?limit=20000"),
   });
 
-  // maceta-01 es la placa real; maceta-sim son datos de práctica y nunca se
-  // mezclan con ella en las curvas.
-  const dispositivos = useMemo(
-    () => Array.from(new Set((data ?? []).map((m) => m.dispositivo))).sort(),
-    [data],
-  );
-  const todos = useMemo(
-    () => prepararSerie((data ?? []).filter((m) => m.dispositivo === dispositivo)),
-    [data, dispositivo],
-  );
+  const todos = useMemo(() => prepararSerie(data ?? []), [data]);
 
   const puntos = useMemo(() => {
     const r = RANGOS.find((x) => x.id === rango)!;
@@ -66,7 +56,12 @@ export function App() {
     res.tramos.length > 1 && {
       nivel: "alerta",
       chip: `${res.tramos.length} tramos`,
-      texto: `La serie tiene ${res.tramos.length - 1} hueco${res.tramos.length > 2 ? "s" : ""} de más de 5 minutos. Sin buffer en la placa, lo que pasa durante un corte de WiFi no se recupera.`,
+      texto: `La serie tiene ${res.tramos.length - 1} hueco${res.tramos.length > 2 ? "s" : ""} de más de 15 minutos (3 envíos seguidos sin llegar). Sin buffer en la placa, lo que pasa durante un corte de WiFi no se recupera.`,
+    },
+    res.intervaloMedianoS < 240 && {
+      nivel: "alerta",
+      chip: `cada ${res.intervaloMedianoS} s`,
+      texto: `El protocolo pide una muestra cada 5 min y estos datos llegan cada ${res.intervaloMedianoS} s: la placa sigue con un firmware con INTERVALO_ENVIO más corto. Hay que volver a flashearla; mientras tanto los gráficos se promedian en ventanas de 5 min.`,
     },
     res.pctSinEtiquetar > 50 && {
       nivel: "alerta",
@@ -95,7 +90,7 @@ export function App() {
 
       <div className="kpis">
         <Kpi etiqueta="Muestras" valor={res.total.toLocaleString("es-AR")}
-             pie={`cada ${res.intervaloMedianoS} s`} />
+             pie={`cada ${cadencia(res.intervaloMedianoS)}`} />
         <Kpi etiqueta="Período" valor={duracion(res.spanMs)}
              pie={`${res.tramos.length} tramo${res.tramos.length > 1 ? "s" : ""} continuo${res.tramos.length > 1 ? "s" : ""}`} />
         <Kpi etiqueta="Suelo" valor={num(u.suelo_pct_calc, 0) ?? "—"} unidad="%"
@@ -113,14 +108,6 @@ export function App() {
         <div className="seccion__cab">
           <h2>Series temporales</h2>
           <div className="filtros">
-            {dispositivos.length > 1 && (
-              <select value={dispositivo} onChange={(e) => setDispositivo(e.target.value)}
-                      aria-label="Dispositivo">
-                {dispositivos.map((d) => (
-                  <option key={d} value={d}>{d === "maceta-sim" ? "maceta-sim (simulado)" : d}</option>
-                ))}
-              </select>
-            )}
             {RANGOS.map((r) => (
               <button key={r.id} aria-pressed={rango === r.id} onClick={() => setRango(r.id)}>
                 {r.texto}

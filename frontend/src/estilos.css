@@ -172,4 +172,3 @@ tbody tr:last-child td { border-bottom: none; }
 .cargando, .error { margin-top: 40px; text-align: center; color: var(--texto-2); }
 .error { color: var(--malo); }
 .pie-pagina { margin-top: 32px; font-size: 0.78rem; color: var(--texto-3); }
-.filtros select { padding: 5px 8px; font: inherit; font-size: 0.82rem; border-radius: 6px; }
