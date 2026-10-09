@@ -1,6 +1,6 @@
 # data — el dataset del proyecto
 
-Cuatro tipos de archivo con roles distintos. La separación es la misma que describe
+Tres tipos de archivo con roles distintos. La separación es la misma que describe
 [docs/ARQUITECTURA.md](../docs/ARQUITECTURA.md) §3: hechos inmutables por un
 lado, anotaciones humanas corregibles por otro.
 
@@ -9,7 +9,6 @@ lado, anotaciones humanas corregibles por otro.
 | `mediciones_raw_<fecha>.csv` | Volcado crudo de la base de Railway, 23 columnas. Lo que la placa midió. | `curl` a `/api/v1/mediciones.csv` |
 | `episodios.csv` | Capa de etiquetas: intervalos `[ts_inicio, ts_fin)` con la condición de la planta. | **A mano** |
 | `dataset.csv` | El dataset de análisis: el crudo limpio, cruzado con los episodios. **Es el entregable.** | `notebooks/01_eda.ipynb` |
-| `simulados_<desde>_a_<hasta>.csv` | Mediciones **simuladas** (`maceta-sim`) para practicar. **No son datos medidos.** | generado con un script que no se versiona |
 
 ## El snapshot crudo no se toca ni se sobreescribe
 
@@ -71,21 +70,17 @@ Snapshot del 2026-09-20, con datos del 12 al 17/09/2026:
 - **7 episodios** y **4 observaciones manuales**. Ese es el N que vale.
 - La ventana de registro cierra el 17/09 a las 18:59.
 
-## Tanda del 1 al 3/10 y datos simulados
+## Tanda del 1 al 3/10
 
-Snapshot `mediciones_raw_2026-10-08.csv`: 6.523 filas, **solo de la placa real**
-(`maceta-01`, del 11/09 al 3/10). Las filas `maceta-sim` que hubiera en la base se
-excluyeron del archivo: lo simulado vive en su propio CSV.
+Snapshot `mediciones_raw_2026-10-08.csv`: 6.523 filas de la placa real (`maceta-01`,
+del 11/09 al 3/10).
 
-- **Real nuevo.** 3.489 filas del 1 al 3/10 y 3 episodios (8 a 10) anclados en
-  las pulsaciones de las muestras 3034, 4242 y 4877. El 8 es una etiqueta a
-  revisar con las fotos: `marchita` con el sustrato igual que `saludable`.
-  Las 9 pulsaciones del 21–22/9 eran pruebas del botón y no tienen episodio.
-- **Simulado.** `maceta-sim`, 4.248 filas en dos ventanas (23/9 12:00 a 1/10 00:30
-  y 3/10 21:00 a 8/10 20:00) que no pisan lo medido, con 48 episodios
-  (ids 11 a 58, autor `simulado`, nota que empieza con `SIMULADO:`). Se generó con un script local (semilla fija) que no se versiona: el CSV es la fuente.
-- **Regla de oro.** Ninguna conclusión sobre la planta puede apoyarse en filas
-  `maceta-sim`. Sirven para probar métodos (validación por episodio, ruido de
-  etiquetas arrastradas), no para aprender sobre el lirio de paz.
-- Para borrar las simuladas de la base (están marcadas `dispositivo = 'maceta-sim'`, `firmware_version = 'sim-1.0'`):
-  `DELETE FROM mediciones WHERE dispositivo = 'maceta-sim';`
+- 3.489 filas del 1 al 3/10 y 3 episodios nuevos (8 a 10) anclados en las
+  pulsaciones de las muestras 3034, 4242 y 4877. El 8 es una etiqueta a revisar
+  con las fotos: `marchita` con el sustrato igual que `saludable`. Las 9
+  pulsaciones del 21–22/9 eran pruebas del botón y no tienen episodio.
+- **La cadencia sigue en 30 s**, no en los 5 min del protocolo: el código del
+  firmware dice 5 min desde el 29/9, pero la placa no se volvió a flashear.
+  Todas las filas de la base llegan cada 30 s.
+- Una fila (id 1) trae la hora de la placa en 2025 (reloj sin sincronizar). El
+  dashboard la ubica con `ts_servidor`.

@@ -31,3 +31,7 @@ export const hace = (iso: string) => {
 /** Celda vacía cuando el sensor falló: nunca un 0, que se lee como medición. */
 export const num = (v: number | null | undefined, dec = 1) =>
   v === null || v === undefined ? null : v.toFixed(dec);
+
+/** Intervalo entre muestras: "30 s", "5 min". */
+export const cadencia = (s: number) =>
+  s < 90 ? `${s} s` : `${Math.round(s / 60)} min`;

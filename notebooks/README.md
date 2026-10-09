@@ -3,7 +3,7 @@
 | Notebook | Qué hace |
 |---|---|
 | [`01_eda.ipynb`](01_eda.ipynb) | Análisis exploratorio del dataset — el entregable de la Tarea 1 |
-| [`02_analisis_ampliado.ipynb`](02_analisis_ampliado.ipynb) | Práctica posterior a la devolución: tanda real de octubre, datos simulados rotulados como tales, ruido de etiquetas, confusión día/noche y validación por episodio |
+| [`02_analisis_ampliado.ipynb`](02_analisis_ampliado.ipynb) | Análisis posterior a la devolución: tanda real de octubre, cadencia, confusión día/noche y validación por episodio |
 
 El notebook está **commiteado con las salidas ejecutadas**, así que se puede leer
 entero sin correr nada.
