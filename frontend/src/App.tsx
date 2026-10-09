@@ -20,6 +20,7 @@ const RANGOS = [
 
 export function App() {
   const [rango, setRango] = useState<string>("24h");
+  const [dispositivo, setDispositivo] = useState<string>("maceta-01");
 
   const { data, isPending, error } = useQuery({
     queryKey: ["mediciones"],
@@ -29,7 +30,16 @@ export function App() {
     queryFn: () => obtener<Medicion[]>("/mediciones?limit=20000"),
   });
 
-  const todos = useMemo(() => prepararSerie(data ?? []), [data]);
+  // maceta-01 es la placa real; maceta-sim son datos de práctica y nunca se
+  // mezclan con ella en las curvas.
+  const dispositivos = useMemo(
+    () => Array.from(new Set((data ?? []).map((m) => m.dispositivo))).sort(),
+    [data],
+  );
+  const todos = useMemo(
+    () => prepararSerie((data ?? []).filter((m) => m.dispositivo === dispositivo)),
+    [data, dispositivo],
+  );
 
   const puntos = useMemo(() => {
     const r = RANGOS.find((x) => x.id === rango)!;
@@ -103,6 +113,14 @@ export function App() {
         <div className="seccion__cab">
           <h2>Series temporales</h2>
           <div className="filtros">
+            {dispositivos.length > 1 && (
+              <select value={dispositivo} onChange={(e) => setDispositivo(e.target.value)}
+                      aria-label="Dispositivo">
+                {dispositivos.map((d) => (
+                  <option key={d} value={d}>{d === "maceta-sim" ? "maceta-sim (simulado)" : d}</option>
+                ))}
+              </select>
+            )}
             {RANGOS.map((r) => (
               <button key={r.id} aria-pressed={rango === r.id} onClick={() => setRango(r.id)}>
                 {r.texto}

@@ -32,9 +32,15 @@ dev = [
 # `from app.ml.features import construir_features`, el MISMO código que corre
 # en la API. Sin esto la separación de carpetas garantiza el train/serve skew.
 ml = [
-    "pandas>=2.2.0",
+    # pandas 3 rompe APIs que usan los notebooks; se fija en la serie 2.x.
+    "pandas>=2.2.0,<3",
+    "numpy>=1.26,<2.3",
     "scikit-learn>=1.5.0",
+    "scipy>=1.11.0",
     "joblib>=1.4.0",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    "jupyterlab>=4.0.0",
 ]
 
 [tool.setuptools.packages.find]
