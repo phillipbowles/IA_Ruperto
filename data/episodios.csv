@@ -1,0 +1,59 @@
+episodio_id,dispositivo,ts_inicio,ts_fin,clase,origen,autor,nota
+1,maceta-01,2026-09-12T22:48:02Z,2026-09-13T11:54:43Z,marchita,corregida,phillip,"Reconstruido a posteriori: no hubo pulsacion del boton en este tramo y las filas llegaron como sin_etiquetar. La clase la aporto el observador de memoria el 2026-09-20. Es el unico bloque nocturno y frio del dataset (8.7 C, 61% HR, 532 mV de luz) y el de suelo mas seco (2840 mV), asi que queda perfectamente confundido con el momento de registro: ver la seccion de limitaciones del notebook."
+2,maceta-01,2026-09-15T12:28:45Z,2026-09-15T13:20:46Z,marchita,propagada,,"Heredada de Preferences al arrancar la placa. No hay ninguna observacion manual que la respalde dentro del dataset."
+3,maceta-01,2026-09-15T13:20:46Z,2026-09-15T15:34:32Z,estresada,manual,,"Pulsacion del boton en la muestra 1643."
+4,maceta-01,2026-09-16T15:36:59Z,2026-09-16T15:47:29Z,estresada,propagada,,"Arranque de la placa con la etiqueta anterior todavia en Preferences; 11 minutos hasta la primera observacion del dia."
+5,maceta-01,2026-09-16T15:47:29Z,2026-09-16T16:51:56Z,saludable,manual,,"Pulsacion del boton en la muestra 1926. Episodio posterior al riego."
+6,maceta-01,2026-09-16T16:51:56Z,2026-09-17T00:09:48Z,estresada,manual,,"Pulsacion del boton en la muestra 2049."
+7,maceta-01,2026-09-17T18:01:09Z,2026-09-17T18:59:39Z,marchita,manual,,"Pulsacion del boton en la muestra 2894. Ultimo tramo antes de que la placa dejara de enviar."
+8,maceta-01,2026-10-01T00:39:57Z,2026-10-01T10:53:01Z,marchita,manual,,"Pulsacion del boton en la muestra 3034. Las 3 primeras filas tienen la sonda de suelo fuera del sustrato (3124 mV, suelo_saturado); a partir de la 3037 el sustrato marca ~1900 mV, que en septiembre correspondia a estresada, no a marchita. Etiqueta dudosa: contrastar con las fotos de la ESP32-CAM."
+9,maceta-01,2026-10-01T10:53:01Z,2026-10-02T01:48:41Z,estresada,manual,,Pulsacion del boton en la muestra 4242. El episodio tiene un hueco de datos de ~9.5 h (la placa reinicio entre el 1/10 15:12 y el 2/10 00:50).
+10,maceta-01,2026-10-02T01:48:41Z,2026-10-03T20:35:50Z,saludable,manual,,"Pulsacion del boton en la muestra 4877. Tramo mas largo de la base (~43 h de calendario, con huecos); sustrato estable en ~1540 mV."
+11,maceta-sim,2026-09-23T12:00:00Z,2026-09-23T19:30:00Z,saludable,propagada,simulado,SIMULADO: tramo inicial que hereda la etiqueta guardada en Preferences (no hubo observacion).
+12,maceta-sim,2026-09-23T19:30:00Z,2026-09-24T11:55:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 67.
+13,maceta-sim,2026-09-24T11:55:00Z,2026-09-24T12:05:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 264.
+14,maceta-sim,2026-09-24T12:05:00Z,2026-09-24T14:25:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 266.
+15,maceta-sim,2026-09-24T14:25:00Z,2026-09-25T11:15:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 294.
+16,maceta-sim,2026-09-25T11:15:00Z,2026-09-25T23:00:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 533.
+17,maceta-sim,2026-09-25T23:00:00Z,2026-09-26T11:05:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 674.
+18,maceta-sim,2026-09-26T11:05:00Z,2026-09-26T13:07:00Z,marchita,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 819.
+19,maceta-sim,2026-09-26T13:07:00Z,2026-09-26T14:25:00Z,marchita,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 857.
+20,maceta-sim,2026-09-26T14:25:00Z,2026-09-26T15:41:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 935.
+21,maceta-sim,2026-09-26T15:41:00Z,2026-09-26T16:40:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1011.
+22,maceta-sim,2026-09-26T16:40:00Z,2026-09-26T17:09:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1070.
+23,maceta-sim,2026-09-26T17:09:00Z,2026-09-26T17:55:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1099.
+24,maceta-sim,2026-09-26T17:55:00Z,2026-09-26T18:35:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1119.
+25,maceta-sim,2026-09-26T18:35:00Z,2026-09-26T21:55:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1159.
+26,maceta-sim,2026-09-26T21:55:00Z,2026-09-27T13:45:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1211.
+27,maceta-sim,2026-09-27T13:45:00Z,2026-09-28T02:15:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1401.
+28,maceta-sim,2026-09-28T02:15:00Z,2026-09-28T13:25:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1544.
+29,maceta-sim,2026-09-28T13:25:00Z,2026-09-28T20:20:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1678.
+30,maceta-sim,2026-09-28T20:20:00Z,2026-09-28T22:05:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1761.
+31,maceta-sim,2026-09-28T22:05:00Z,2026-09-29T23:00:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 1782.
+32,maceta-sim,2026-09-29T23:00:00Z,2026-09-30T01:35:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2061.
+33,maceta-sim,2026-09-30T01:35:00Z,2026-09-30T01:45:00Z,marchita,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2092.
+34,maceta-sim,2026-09-30T01:45:00Z,2026-09-30T06:15:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2094.
+35,maceta-sim,2026-09-30T06:15:00Z,2026-09-30T07:30:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2160.
+36,maceta-sim,2026-09-30T07:30:00Z,2026-09-30T08:15:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2235.
+37,maceta-sim,2026-09-30T08:15:00Z,2026-09-30T09:24:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2280.
+38,maceta-sim,2026-09-30T09:24:00Z,2026-09-30T10:34:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2349.
+39,maceta-sim,2026-09-30T10:34:00Z,2026-09-30T11:52:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2419.
+40,maceta-sim,2026-09-30T11:52:00Z,2026-09-30T12:15:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2497.
+41,maceta-sim,2026-09-30T12:15:00Z,2026-09-30T21:05:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2508.
+42,maceta-sim,2026-09-30T21:05:00Z,2026-10-01T00:05:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2614.
+43,maceta-sim,2026-10-01T00:05:00Z,2026-10-01T00:30:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2636.
+44,maceta-sim,2026-10-03T21:05:00Z,2026-10-03T22:30:00Z,saludable,propagada,simulado,SIMULADO: tramo inicial que hereda la etiqueta guardada en Preferences (no hubo observacion).
+45,maceta-sim,2026-10-03T22:30:00Z,2026-10-04T19:05:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2659.
+46,maceta-sim,2026-10-04T19:05:00Z,2026-10-04T19:35:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2897.
+47,maceta-sim,2026-10-04T19:35:00Z,2026-10-04T21:35:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2903.
+48,maceta-sim,2026-10-04T21:35:00Z,2026-10-05T11:35:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 2927.
+49,maceta-sim,2026-10-05T11:35:00Z,2026-10-05T19:35:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3082.
+50,maceta-sim,2026-10-05T19:35:00Z,2026-10-06T23:35:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3161.
+51,maceta-sim,2026-10-06T23:35:00Z,2026-10-07T12:58:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3485.
+52,maceta-sim,2026-10-07T12:58:00Z,2026-10-07T14:23:00Z,marchita,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3660.
+53,maceta-sim,2026-10-07T14:23:00Z,2026-10-07T15:13:00Z,estresada,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3745.
+54,maceta-sim,2026-10-07T15:13:00Z,2026-10-07T16:28:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3795.
+55,maceta-sim,2026-10-07T16:28:00Z,2026-10-07T17:50:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3870.
+56,maceta-sim,2026-10-07T17:50:00Z,2026-10-07T20:05:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 3952.
+57,maceta-sim,2026-10-07T20:05:00Z,2026-10-08T01:20:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 4019.
+58,maceta-sim,2026-10-08T01:20:00Z,2026-10-08T20:00:00Z,saludable,manual,simulado,SIMULADO: pulsacion del boton simulada en la muestra 4082.
