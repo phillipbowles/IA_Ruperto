@@ -266,3 +266,47 @@ tbody tr:last-child td { border-bottom: none; }
 .cargando, .error { margin-top: 40px; text-align: center; color: var(--texto-2); }
 .error { color: var(--malo); }
 .pie-pagina { margin-top: 32px; font-size: 0.78rem; color: var(--texto-3); }
+
+/* ── pestañas y análisis de foto ──────────────────────────────────────── */
+.pestanas { margin-bottom: 18px; }
+
+/* Misma tarjeta que el avatar del lirio; las clases lirio--<estado> que lleva
+   .analisis fijan --lirio-estado para el punto del nombre. */
+.analisis { display: flex; flex-wrap: wrap; align-items: center; gap: 20px 24px; margin-top: 20px;
+  padding: 16px 24px; background: var(--panel); border: 1px solid var(--borde); border-radius: 16px; }
+.analisis__caja { flex: none; width: 260px; height: 238px; display: grid; place-items: center;
+  background: var(--panel-alt); border-radius: 14px; overflow: hidden; }
+.analisis__subida { cursor: pointer; border: 2px dashed var(--borde); transition: border-color 0.2s, background 0.2s; }
+.analisis__subida:hover, .analisis__subida--sobre { border-color: var(--serie-1); }
+.analisis__subida--sobre { background: color-mix(in srgb, var(--serie-1) 8%, var(--panel-alt)); }
+.analisis__subida:focus-visible { outline: 2px solid var(--serie-1); outline-offset: 2px; }
+.analisis__subida img { width: 100%; height: 100%; object-fit: cover; }
+.analisis__invitacion { display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 16px; text-align: center; color: var(--texto-2); font-size: 0.9rem; }
+.analisis__invitacion svg { width: 34px; height: 34px; fill: none; stroke: var(--texto-3);
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.analisis__medidor { padding: 12px; }
+.analisis__error { color: var(--malo); }
+.analisis__detalle { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 4px 0 0;
+  max-width: 60ch; font-size: 0.88rem; }
+.analisis__detalle dt { color: var(--texto-3); font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.08em; padding-top: 2px; }
+.analisis__detalle dd { margin: 0; color: var(--texto-2); }
+
+.medidor { width: 100%; height: auto; overflow: visible; }
+.medidor-marca { stroke: var(--texto-3); stroke-width: 1.2; }
+.medidor-titulo { fill: var(--texto-2); font-size: 9.5px; font-weight: 600; letter-spacing: 0.14em; }
+.medidor-aguja { fill: #8a8f96; transition: transform 1.4s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.medidor-eje { fill: #8a8f96; }
+.medidor-valor { fill: #fff; font-size: 11px; font-weight: 700; }
+.medidor--vacio .medidor-aguja, .medidor--vacio .medidor-eje { opacity: 0.45; }
+
+@media (max-width: 640px) {
+  .analisis { padding: 16px; }
+  .analisis__caja { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .medidor-aguja { transition: none; }
+}
+.analisis__metodos { margin-top: 20px; }
+.filtros button:disabled { opacity: 0.6; cursor: progress; }

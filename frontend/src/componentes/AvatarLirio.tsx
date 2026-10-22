@@ -2,7 +2,9 @@ import type { Clase, EtiquetaOrigen } from "../tipos";
 import { hace } from "../lib/formato";
 
 /** Avatar del lirio de paz en la cabecera: la pose y la carita salen de la
- *  `condicion_etiqueta` de la última medición. Las transiciones entre estados
+ *  predicción del modelo de la placa en la última medición. Si la placa no
+ *  predijo (firmware anterior al 2.0.0, o sin DHT11), cae a la
+ *  `condicion_etiqueta` del botón y lo dice en el pie. Las transiciones entre estados
  *  son CSS (estilos.css, sección «avatar del lirio»): cada hoja rota en la
  *  base y la lámina rota en la punta del pecíolo, así se dobla en vez de girar
  *  entera. `null` = la última fila vino `sin_etiquetar`: pose neutra, sin
@@ -49,9 +51,13 @@ function Hoja({ c, j, lam, n }: (typeof HOJAS)[number]) {
   );
 }
 
-export function AvatarLirio({ estado, origen, ts }: {
+export type FuenteEstado =
+  | { tipo: "modelo"; version: string; proba: number | null }
+  | { tipo: "boton"; origen: EtiquetaOrigen | null };
+
+export function AvatarLirio({ estado, fuente, ts }: {
   estado: Clase | null;
-  origen: EtiquetaOrigen | null;
+  fuente: FuenteEstado;
   ts: string;
 }) {
   const clave = estado ?? "sin";
@@ -136,7 +142,12 @@ export function AvatarLirio({ estado, origen, ts }: {
         </span>
         <p className="lirio__detalle">{detalle}</p>
         <span className="lirio__pie">
-          Según la última medición{origen && estado ? ` (${ORIGEN[origen]})` : ""} · {hace(ts)}
+          {fuente.tipo === "modelo"
+            ? `Predicción del modelo de la placa (${fuente.version}`
+              + `${fuente.proba !== null ? `, p = ${fuente.proba.toFixed(2)}` : ""})`
+            : `Sin predicción del modelo: etiqueta del botón`
+              + `${fuente.origen && estado ? ` (${ORIGEN[fuente.origen]})` : ""}`}
+          {" · "}{hace(ts)}
         </span>
       </div>
     </section>

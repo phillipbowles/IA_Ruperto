@@ -10,7 +10,7 @@ from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 
 from ..database import get_db
-from ..models import Medicion
+from ..models import Medicion, Prediccion
 from ..schemas import MedicionIn, MedicionOut, MedicionResponse
 
 router = APIRouter(prefix="/api/v1", tags=["mediciones"])
@@ -36,15 +36,30 @@ def verificar_token(x_device_token: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Token inválido o ausente")
 
 
+CAMPOS_PREDICCION = {"prediccion_codigo", "prediccion_etiqueta", "prediccion_proba", "modelo_version"}
+CLASES = {"saludable", "estresada", "marchita"}
+
+
 def _a_modelo(data: MedicionIn) -> Medicion:
     """Convierte el payload de la placa en fila. El unix epoch UTC se guarda
-    como timestamp con zona; null si la placa todavía no sincronizó NTP."""
-    campos = data.model_dump(exclude={"ts_dispositivo_unix"})
+    como timestamp con zona; null si la placa todavía no sincronizó NTP. La
+    predicción no es parte del hecho medido: va a `predicciones` (ver abajo)."""
+    campos = data.model_dump(exclude={"ts_dispositivo_unix"} | CAMPOS_PREDICCION)
     ts = data.ts_dispositivo_unix
     campos["ts_dispositivo"] = (
         datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
     )
-    return Medicion(**campos)
+    m = Medicion(**campos)
+    # Sin versión de modelo no se sabe qué predijo; una clase fuera de las tres
+    # es un payload roto. En los dos casos la muestra se guarda igual, sin
+    # predicción.
+    if data.prediccion_etiqueta in CLASES and data.modelo_version:
+        m.predicciones.append(Prediccion(
+            modelo_version=data.modelo_version,
+            clase=data.prediccion_etiqueta,
+            proba=data.prediccion_proba,
+        ))
+    return m
 
 
 @router.post("/mediciones", response_model=MedicionResponse, status_code=201)

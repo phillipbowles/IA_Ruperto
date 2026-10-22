@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Literal, Optional, List
 from datetime import datetime
 
 
@@ -37,6 +37,13 @@ class MedicionIn(BaseModel):
     wifi_rssi:            Optional[int] = None
     errores:              Optional[List[str]] = None
 
+    # Salida del modelo de la placa (firmware 2.0.0+). Se guarda en la tabla
+    # `predicciones`, nunca junto a la etiqueta humana. Null = sin predicción.
+    prediccion_codigo:    Optional[int]   = None
+    prediccion_etiqueta:  Optional[str]   = None
+    prediccion_proba:     Optional[float] = None
+    modelo_version:       Optional[str]   = None
+
 
 class MedicionOut(BaseModel):
     id:                   int
@@ -62,6 +69,9 @@ class MedicionOut(BaseModel):
     wifi_rssi:            Optional[int]
     errores:              Optional[List[str]]
     ts_servidor:          datetime
+    prediccion_etiqueta:  Optional[str] = None
+    prediccion_proba:     Optional[float] = None
+    modelo_version:       Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -96,3 +106,18 @@ class FotoGuardadaResponse(BaseModel):
     sha256:     str
     recibido_en: datetime
     imagen_url: str
+
+
+class AnalisisFotoOut(BaseModel):
+    """Diagnóstico de una foto de la planta hecho por Claude. No se guarda en
+    la base: es una consulta, no una medición ni una etiqueta."""
+    es_planta:   bool
+    estado:      Optional[Literal["saludable", "estresada", "marchita"]] = None
+    puntaje:     Optional[int] = None    # 0 = hojas caídas, 100 = turgente
+    hojas:       str
+    flores:      str
+    explicacion: str
+    metodo:      Literal["ia", "vision"]
+    modelo:      str
+    # Sólo visión clásica: las mediciones de forma que dan el puntaje.
+    metricas:    Optional[dict[str, float]] = None

@@ -30,4 +30,27 @@ export interface Medicion {
   etiqueta_origen: EtiquetaOrigen | null;
   wifi_rssi: number | null;
   errores: string[] | null;
+  /** Salida del modelo de la placa (firmware 2.0.0+, tabla `predicciones`).
+   *  Null si la placa no predijo: firmware viejo o sin DHT11 válido. */
+  prediccion_etiqueta: Clase | null;
+  prediccion_proba: number | null;
+  modelo_version: string | null;
 }
+
+/** Respuesta de POST /api/v1/analisis-foto (backend/app/schemas.py, AnalisisFotoOut). */
+export interface AnalisisFoto {
+  es_planta: boolean;
+  estado: Clase | null;
+  puntaje: number | null;   // 0 = hojas caídas, 100 = turgente
+  hojas: string;
+  flores: string;
+  explicacion: string;
+  metodo: MetodoAnalisis;
+  modelo: string;
+  /** Sólo visión clásica: las mediciones que dan el puntaje. */
+  metricas: Record<string, number> | null;
+}
+
+/** ia = Claude mira la foto; vision = segmentación por color y ángulo de las
+ *  hojas (backend/app/vision.py), sin IA generativa. */
+export type MetodoAnalisis = "ia" | "vision";
