@@ -13,12 +13,12 @@ INSTRUCCIONES PARA LA CONVERSIÓN A LaTeX (no forman parte del informe)
 - Los nombres en `monoespaciado` son identificadores de código o de
   variables: usar \texttt{}.
 - No agregar contenido ni cambiar números. Se puede acortar redacción.
-- Autores: completar en el título (equipo 11).
+- Autores: Manuel Pérez, Guillermo Storace y Phillip Bowles (van en \author).
 -->
 
 # PlantaIa — Tarea 2: clasificador del estado de la planta ejecutado en la ESP32
 
-**Curso:** Inteligencia Artificial · **Equipo:** 11 · **Fecha:** 22/10/2026
+**Autores:** Manuel Pérez, Guillermo Storace y Phillip Bowles · **Curso:** Inteligencia Artificial · **Equipo:** 11 · **Fecha:** 22/10/2026
 
 ## 1. Objetivo
 
