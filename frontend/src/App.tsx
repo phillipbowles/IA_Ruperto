@@ -13,7 +13,6 @@ import { DispersionTemp } from "./componentes/DispersionTemp";
 import { TablaRegistros } from "./componentes/TablaRegistros";
 import { AvatarLirio } from "./componentes/AvatarLirio";
 import { AnalisisFoto } from "./componentes/AnalisisFoto";
-import { Calibracion } from "./componentes/Calibracion";
 
 const RANGOS = [
   { id: "24h", texto: "24 h", ms: 24 * 3600e3 },
@@ -24,7 +23,6 @@ const RANGOS = [
 const VISTAS = [
   { id: "panel", texto: "Panel de sensores" },
   { id: "foto", texto: "Analizar foto" },
-  { id: "calibrar", texto: "Calibrar" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
 
@@ -52,22 +50,8 @@ export function App() {
           </button>
         ))}
       </nav>
-      {vista === "foto" ? <VistaFoto /> : vista === "calibrar" ? <VistaCalibrar /> : <Tablero />}
+      {vista === "foto" ? <VistaFoto /> : <Tablero />}
     </main>
-  );
-}
-
-function VistaCalibrar() {
-  return (
-    <>
-      <header className="cabecera">
-        <div>
-          <h1>PlantaIa</h1>
-          <p className="sub">Calibración del análisis de fotos · lo que ustedes ven contra lo que dice el modelo</p>
-        </div>
-      </header>
-      <Calibracion />
-    </>
   );
 }
 

@@ -94,11 +94,13 @@ bajo: funcionaba con dibujos limpios y fallaba en una cocina real.
 ## 5. Calibración: cómo se mejora sin sobreajustar
 
 Ajustar los cortes mirando la última foto que salió mal arregla esa foto y
-rompe otras. La pestaña **Calibrar** guarda cada foto con lo que ustedes
-observan, para medir cada cambio contra todas:
+rompe otras. La sección de **calibración**, debajo del análisis en la pestaña
+**Analizar foto**, guarda cada foto con lo que ustedes observan, para medir
+cada cambio contra todas:
 
-1. **Cargar casos.** Foto + estado observado (+ puntaje 0–100 y nota, si
-   quieren). La foto va al Railway Bucket (`calibracion/AAAA/MM/DD/…`) y la
+1. **Cargar casos.** Se analiza una foto como siempre; con la clave puesta,
+   abajo se marca el estado observado (+ puntaje 0–100 y nota, si quieren) y
+   se guarda esa misma foto. La foto va al Railway Bucket (`calibracion/AAAA/MM/DD/…`) y la
    fila a la tabla `calibraciones_foto` (migración `0005`), con lo que dijeron
    la visión clásica y, si se pide, la IA, y la versión que lo calculó.
 2. **Re-evaluar.** El botón corre la visión clásica **actual** sobre todas las
@@ -114,5 +116,5 @@ observan, para medir cada cambio contra todas:
 
 Todo el `/api/v1/calibracion` pide el header `X-Calibracion-Token` igual a
 `CALIBRACION_TOKEN` del backend: las fotos son de una casa y pueden mostrar
-personas reflejadas. El front pide la clave una vez y la guarda en ese
-navegador.
+personas reflejadas. El front pide la clave («Colocá la clave para calibrar»)
+una vez y la guarda en ese navegador.

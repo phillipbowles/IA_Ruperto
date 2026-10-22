@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ErrorApi } from "../api/cliente";
 import type { Clase } from "../tipos";
-import { achicar } from "./AnalisisFoto";
+import { achicar } from "../lib/imagen";
 
-/** Pestaña «Calibrar»: fotos de la planta con lo que una persona observó, para
- *  medir la visión clásica y mejorarla sin ajustarla a la última foto
- *  (docs/VISION_CLASICA.md §5). Todo pide la clave de calibración: las fotos
- *  pueden mostrar la casa o personas reflejadas. */
+/** Calibración, debajo del análisis de foto: con la clave se habilita marcar
+ *  cómo ven ustedes la foto cargada arriba y guardarla, para medir la visión
+ *  clásica y mejorarla sin ajustarla a la última foto (docs/VISION_CLASICA.md
+ *  §5). Todo pide la clave: las fotos pueden mostrar la casa o personas
+ *  reflejadas. */
 
 const CLASES: Clase[] = ["saludable", "estresada", "marchita"];
 const NOMBRE: Record<Clase, string> = { saludable: "Saludable", estresada: "Estresada", marchita: "Marchita" };
@@ -85,34 +86,33 @@ function Pastilla({ estado, puntaje }: { estado: Clase | null; puntaje: number |
   );
 }
 
-export function Calibracion() {
+export function Calibracion({ archivo }: { archivo: File | null }) {
   const [clave, setClave] = useState(leerClave);
   const [borrador, setBorrador] = useState("");
 
   if (!clave) {
     return (
       <section className="panel calib__clave">
-        <h2>Clave de calibración</h2>
-        <p className="lirio__detalle">
-          Las fotos de calibración se guardan en el bucket y pueden mostrar la casa, así que esta sección pide la
-          clave que está en <code>CALIBRACION_TOKEN</code> del backend. Se guarda sólo en este navegador.
-        </p>
+        <div>
+          <span className="lirio__et">Calibración</span>
+          <p className="lirio__detalle">
+            Colocá la clave para calibrar: se habilita marcar cómo ven ustedes la foto de arriba y guardarla para
+            medir el modelo.
+          </p>
+        </div>
         <form onSubmit={(e) => { e.preventDefault(); guardarClave(borrador.trim()); setClave(borrador.trim()); }}>
           <input type="password" value={borrador} onChange={(e) => setBorrador(e.target.value)}
-                 placeholder="Clave" autoComplete="current-password" aria-label="Clave de calibración" />
-          <button type="submit" disabled={!borrador.trim()}>Entrar</button>
+                 placeholder="Clave de calibración" autoComplete="current-password" aria-label="Clave de calibración" />
+          <button type="submit" disabled={!borrador.trim()}>Habilitar</button>
         </form>
       </section>
     );
   }
-  return <ConClave clave={clave} salir={() => { guardarClave(""); setClave(""); }} />;
+  return <ConClave clave={clave} archivo={archivo} salir={() => { guardarClave(""); setClave(""); }} />;
 }
 
-function ConClave({ clave, salir }: { clave: string; salir: () => void }) {
+function ConClave({ clave, archivo, salir }: { clave: string; archivo: File | null; salir: () => void }) {
   const qc = useQueryClient();
-  const entrada = useRef<HTMLInputElement>(null);
-  const [archivo, setArchivo] = useState<File | null>(null);
-  const [vista, setVista] = useState<string | null>(null);
   const [etiqueta, setEtiqueta] = useState<Clase | null>(null);
   const [conPuntaje, setConPuntaje] = useState(false);
   const [puntaje, setPuntaje] = useState(50);
@@ -138,7 +138,7 @@ function ConClave({ clave, salir }: { clave: string; salir: () => void }) {
       });
     },
     onSuccess: () => {
-      setArchivo(null); setVista(null); setEtiqueta(null); setNota(""); setConPuntaje(false);
+      setEtiqueta(null); setNota(""); setConPuntaje(false);
       qc.invalidateQueries({ queryKey: ["calibracion"] });
       evaluacion.reset();
     },
@@ -148,40 +148,23 @@ function ConClave({ clave, salir }: { clave: string; salir: () => void }) {
     onSuccess: () => { setABorrar(null); qc.invalidateQueries({ queryKey: ["calibracion"] }); evaluacion.reset(); },
   });
 
-  useEffect(() => () => { if (vista) URL.revokeObjectURL(vista); }, [vista]);
+  // Foto nueva arriba: el «guardada» de la anterior ya no aplica.
+  useEffect(() => { guardar.reset(); }, [archivo]); // eslint-disable-line react-hooks/exhaustive-deps
   // Clave rechazada: volver al formulario de la clave.
   useEffect(() => { if ((lista.error as ErrorApi | null)?.estado === 401) salir(); }, [lista.error, salir]);
 
-  const elegir = (f: File | undefined) => {
-    if (!f || !f.type.startsWith("image/")) return;
-    setArchivo(f); setVista(URL.createObjectURL(f)); guardar.reset();
-  };
   const filasEval = new Map((evaluacion.data?.filas ?? []).map((f) => [f.id, f]));
 
   return (
     <>
-      <section className="analisis calib__alta">
-        <div className="analisis__caja analisis__subida" role="button" tabIndex={0}
-             aria-label="Elegir una foto para calibrar"
-             onClick={() => entrada.current?.click()}
-             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && entrada.current?.click()}
-             onDragOver={(e) => e.preventDefault()}
-             onDrop={(e) => { e.preventDefault(); elegir(e.dataTransfer.files[0]); }}>
-          {vista ? <img src={vista} alt="Foto a calibrar" /> : (
-            <span className="analisis__invitacion">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" /></svg>
-              Subí una foto y marcá cómo ves la planta
-            </span>
-          )}
-          <input ref={entrada} type="file" accept="image/*" hidden
-                 onChange={(e) => { elegir(e.target.files?.[0]); e.target.value = ""; }} />
-        </div>
-
+      <section className="panel calib__alta">
         <div className="lirio__texto calib__form">
-          <span className="lirio__et">¿Cómo la ves vos?</span>
+          <span className="lirio__et">Calibración · ¿cómo ven ustedes la foto de arriba?</span>
+          {!archivo && <p className="lirio__detalle">Subí una foto arriba para poder etiquetarla.</p>}
           <div className="filtros">
             {CLASES.map((c) => (
-              <button key={c} aria-pressed={etiqueta === c} onClick={() => setEtiqueta(c)}>{NOMBRE[c]}</button>
+              <button key={c} aria-pressed={etiqueta === c} disabled={!archivo}
+                      onClick={() => setEtiqueta(c)}>{NOMBRE[c]}</button>
             ))}
           </div>
           <label className="calib__check">
