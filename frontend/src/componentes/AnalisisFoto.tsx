@@ -6,12 +6,13 @@ import { Medidor } from "./Medidor";
 
 /** Pestaña «Analizar foto»: se sube una foto del lirio y vuelve un puntaje de
  *  turgencia (cuánto están caídas las hojas y las flores) que mueve el medidor.
- *  Dos métodos: Claude mirando la foto, o visión por computadora clásica. Es una
+ *  Dos métodos: un modelo de IA mirando la foto (Gemini o Claude), o visión por
+ *  computadora clásica. Es una
  *  consulta: no se guarda en la base ni cambia la etiqueta de la placa. */
 
 const METODOS: { id: MetodoAnalisis; texto: string; descripcion: string }[] = [
-  { id: "ia", texto: "IA (Claude)",
-    descripcion: "Claude mira la foto y juzga cuánto están caídas las hojas y las flores." },
+  { id: "ia", texto: "IA",
+    descripcion: "Un modelo de IA (Gemini o Claude, el que esté configurado) mira la foto y juzga cuánto están caídas las hojas y las flores." },
   { id: "vision", texto: "Visión clásica",
     descripcion: "Segmenta las hojas por color y mide su ángulo sobre la horizontal desde la base de la planta, sin IA generativa." },
 ];
