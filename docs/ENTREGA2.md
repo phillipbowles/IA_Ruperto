@@ -18,9 +18,9 @@ Fecha de arranque: 2026-10-21.
 | Codificar el target | 3 clases, códigos 1–3 (ver §2) | `ml/plantaia_ml/` |
 | Implementar y comparar clasificadores | Notebook ejecutado + resumen de resultados | `notebooks/03_modelos.ipynb`, `docs/entrega2/RESULTADOS.md`, `docs/entrega2/tablas_03_modelos.md` |
 | Visualizar resultados | Figuras en el notebook + PNG exportados | `docs/entrega2/fig/` |
-| Calidad de los datos (real y simulado) | Auditoría de la base y del relleno simulado (v1 → v2) | `docs/entrega2/AUDITORIA_DATOS.md` |
+| Calidad de los datos | Auditoría de la base | `docs/entrega2/AUDITORIA_DATOS.md` |
 | Elegir modelo compatible con la ESP32 | Tabla rendimiento × costo | notebook §5 |
-| Exportar el modelo | Header C generado (`rf-f04-7734f6`) | `firmware/lib/plantaia_ml/modelo_plantaia.h` |
+| Exportar el modelo | Header C generado (versión en `PLANTAIA_MODELO_VERSION`) | `firmware/lib/plantaia_ml/modelo_plantaia.h` |
 | Inferencia en tiempo real en la placa | Firmware 2.0.0 | `firmware/src/main.cpp` + `firmware/lib/plantaia_ml/` |
 | Actuador físico | Semáforo LED = predicción del modelo | GPIO 25/26/27 |
 | Documentar la lógica en el micro | | `firmware/lib/plantaia_ml/README.md` |
@@ -41,10 +41,10 @@ Fecha de arranque: 2026-10-21.
   balanceada** (peor que el azar): con tan pocos episodios el modelo aprende a
   qué episodio pertenece una fila, no la condición de la planta. La clase
   además está confundida con la hora del día (V de Cramér 0,70).
-- **Conclusión: con los datos reales solos no se puede entrenar un modelo que
-  generalice.** La consigna permite completar los datos faltantes simulando;
-  los días sin datos de `maceta-01` se completan con un simulador calibrado
-  con lo medido (§3.2).
+- **Conclusión: con tan pocos episodios cualquier métrica fuera de muestra es
+  frágil.** Aun así se entrena y evalúa **sólo con lo que midió la placa**:
+  partición por episodio, baselines obligatorios, y el N que se reporta son
+  los episodios reales. Los días sin datos no se completan (§3.2).
 
 ### Decisión de arquitectura que cambia
 
@@ -99,41 +99,18 @@ clases**.
    - Marcar los episodios dudosos para reportar con y sin ellos
      (`EPISODIOS_DUDOSOS = {8, 9, 11, 14}`, ver la nota de cada uno).
 
-### 3.2 Completar los días sin datos de `maceta-01`
+### 3.2 Los días sin datos de `maceta-01`
 
-Hay **una sola maceta**, `maceta-01`. Los días sin datos se completan por
-simulación, en local (`data/sintetico/` y el código del simulador están en
-`.gitignore`), para tener una serie continua del 12/09 al 21/10 con
-suficientes episodios de cada clase.
+Hay **una sola maceta**, `maceta-01`, y su serie tiene huecos: los grandes son
+**17/09 → 01/10** (con algunas filas sueltas el 21–22/09) y **03/10 → 18/10**,
+más cortes chicos por reinicios y cortes de luz. **Los huecos quedan como
+huecos**: no se interpolan ni se completan con datos simulados.
 
-- **Empalme con los bordes**: cada hueco arranca con el estado y los valores
-  de la última muestra real anterior y termina en la primera muestra real
-  posterior. Huecos grandes: **17/09 → 01/10** (las filas del 21–22/09 son
-  anclas) y **03/10 → 18/10** (arranca `saludable` con ~1540 mV y termina en
-  ~2059 mV, con `marchita` el 19/10). Los huecos chicos (< 6 h) se empalman
-  sin eventos.
-- **Estado latente**: fracción de agua del sustrato θ. Cada 5 min,
-  `θ -= k_base + k_et · demanda(luz, VPD, T)`. Los riegos llevan θ a 0,85–1.
-- **Condición**:
-  - `marchita` si θ < ~0,18. Tras un riego se recupera con 2–6 h de lag,
-    pasando por `estresada`.
-  - `estresada` si θ < ~0,35, o si θ < ~0,5 con demanda alta (marchitez
-    transitoria de mediodía).
-  - `saludable` en otro caso.
-- **Secado**: varios ciclos completos en los huecos grandes. Se apunta a
-  ~20–25 % de filas `marchita` y a varias decenas de episodios en total.
-- **Radiador**: T de 28–36 °C y HR de 20–30 %, calibrados con el 15–16/09.
-  **Máximo 3 ciclos en toda la serie**, contando los reales, así que el relleno
-  agrega uno como mucho.
-- **Freezer**: como mucho 1 ciclo de 20–90 min. El DHT11 no mide bajo 0 °C. El
-  daño por frío da `marchita` con el suelo húmedo.
-- **Sensores**: misma curva de `suelo_mv` que la maceta real, ruido, deriva,
-  transitorio post-reinicio y DHT11 cuantizado y con fallas.
-- Las tres clases aparecen a distintas horas del día.
-
-Para evaluar se guarda una marca local (`fuente`) que **no** se commitea ni va
-a la base. Sirve para no medir el modelo contra datos que generó el propio
-simulador.
+- Las features cortan la ventana en cada hueco y en cada `boot_id` nuevo
+  (§4), igual que el buffer de la placa.
+- El costo es tener menos episodios de cada clase: el modelo se entrena y se
+  evalúa con lo que hay, y la incertidumbre se reporta sobre los episodios
+  medidos, no sobre las filas.
 
 ### 3.3 Las temperaturas altas no son outliers
 
@@ -189,14 +166,14 @@ Reglas:
 
 ### 5.1 Protocolo de evaluación
 
-- **Partición por `episodio_id`** (k=5) sobre la serie completa de
-  `maceta-01`: media ± desvío. Se usa `StratifiedGroupKFold` (un `GroupKFold`
-  que reparte los episodios para que cada fold tenga las tres clases).
-- Control local (no va al notebook commiteado como tal): métricas sólo en los
-  episodios medidos, con y sin los dudosos (8, 9, 11, 14).
-- Referencia: el mismo protocolo entrenando sólo con reales (reproduce el
-  hallazgo del notebook 02 con los episodios nuevos).
-- Baselines obligatorios: clase mayoritaria y un umbral único sobre `suelo_mv`.
+- **Partición por `episodio_id`** (k=5, `StratifiedGroupKFold`) sobre la
+  serie medida de `maceta-01`. Con 11 episodios cada fold de test tiene 2 o 3
+  y ninguno tiene las tres clases, así que las métricas se calculan **una vez
+  sobre las predicciones fuera de fold juntas**, con el desvío de un
+  **bootstrap por episodio** (no media ± desvío por fold).
+- Las métricas se reportan con y sin los episodios dudosos (8, 9, 11, 14).
+- Baselines obligatorios: clase mayoritaria y un umbral único sobre `suelo_mv`
+  (el notebook suma dos umbrales sobre `suelo_mv`, el rival honesto).
 - Métricas: exactitud balanceada, F1 macro, recall de `marchita` (el error caro
   es no avisar), matriz de confusión, ROC-AUC OvR cuando haya probabilidades.
 
@@ -253,8 +230,6 @@ salvo que el número diga otra cosa.
   host con `[env:native]`.
 - **Replay en host**: un test nativo pasa un tramo real (19/10, 150 muestras)
   por el mismo código y deja el log en `docs/entrega2/logs/replay_host.txt`.
-  El plan original incluía también un tramo simulado; se dejó afuera para que
-  el log de la entrega sea sólo de datos medidos.
 
 ---
 
@@ -262,7 +237,7 @@ salvo que el número diga otra cosa.
 
 ```
 Fase 1 (en paralelo)          Fase 2                 Fase 3
-  A. datos + simulador ─────►  B. modelos + export ─┐
+  A. datos ────────────────►  B. modelos + export ─┐
   C. firmware (modelo de prueba) ────────────────── ├─► D. informe + docs
                                                     └─► Integración (pio test, pio run)
 ```
@@ -272,12 +247,12 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
 | A1 | Episodios 11+ del 18–21/10 en `episodios.csv` + `data/README.md` | datos | ✅ |
 | A2 | `datos_reales.py`: limpieza, remuestreo, post-boot | datos | ✅ |
 | A3 | `features.py` según §4 + tests | datos | ✅ |
-| A4 | Completar huecos de `maceta-01` (§3.2): secado, radiador, freezer | datos | ✅ |
+| A4 | Documentar los huecos de `maceta-01` (§3.2); se entrena sólo con lo medido | datos | ✅ |
 | C1 | `lib/plantaia_ml/` (buffer, features, API del modelo con un modelo de prueba) | firmware | ✅ |
 | C2 | `main.cpp` 2.0.0: inferencia cada 5 min, LEDs, LCD, log, payload | firmware | ✅ |
 | C3 | `[env:native]` + tests de features + replay | firmware | ✅ |
 | B1 | `notebooks/03_modelos.ipynb`: preparación, baselines, 7 modelos, GroupKFold | modelos | ✅ |
-| B2 | Test externo en reales, costo en la ESP32, selección justificada | modelos | ✅ |
+| B2 | Evaluación con y sin dudosos, costo en la ESP32, selección justificada | modelos | ✅ |
 | B3 | `exportar_c.py` → `modelo_plantaia.h` + vectores de paridad | modelos | ✅ |
 | I1 | `pio test -e native` y `pio run` en verde con el modelo real | integración | ✅ |
 | D1 | Informe ≤ 3 págs. en PDF + figuras + logs | informe | fuera del repo |
@@ -287,31 +262,25 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
 
 ### Estado al 2026-10-21
 
-- **Modelo final: `rf-f04-7734f6`.** Random Forest de 30 árboles,
-  `max_depth=5`, `min_samples_leaf=20`, con `suelo_mv` y `vpd_kpa`
-  (`CONFIG_FINAL` en `ml/plantaia_ml/modelos.py`, ~23,7 KB de flash).
+- **Modelo final:** la versión vigente está en
+  `firmware/lib/plantaia_ml/modelo_plantaia.h` (`PLANTAIA_MODELO_VERSION`) y
+  la configuración en `CONFIG_FINAL` de `ml/plantaia_ml/modelos.py`.
   Métricas, costo y justificación en
   [docs/entrega2/RESULTADOS.md](entrega2/RESULTADOS.md).
   - **Restricción de diseño (2026-10-21):** el semáforo no puede depender sólo
-    de la sonda. Todo candidato usa `suelo_mv` y al menos una feature
-    ambiental.
-  - **Agregado después de ver resultados**, por decisión de producto (el error
-    caro es no avisar marchita, §5.1):
-    - la ambiental tiene que cambiar ≥ 1 % de las predicciones reales;
-    - el modelo no puede perder la marchita real: recall ≥ 0,9 sin dudosos y
-      el ep. 12 bien.
-  - **Modelos anteriores.** El criterio original solo elegía el Naive Bayes
-    `nb-f02-fa0df4`, que fallaba el ep. 12. Antes de la restricción ganaba el
-    RF sólo-suelo `rf-f0-c42286`.
+    de la sonda. Todo candidato usa `suelo_mv` y al menos una ambiental del
+    aire (T, HR o VPD). **La luz no entra** (decidido después de ver
+    resultados: con luz el modelo aprende "oscuro → marchita").
+  - **Condición de seguridad** (recall de marchita ≥ 0,9 sin dudosos y el
+    ep. 12 ≥ 50 % fuera de fold): hoy no la cumple ninguna configuración sin
+    luz, así que queda la del criterio de §5.3 (árbol de profundidad 2).
+- **Sólo datos medidos:** el entrenamiento, la evaluación y el exportador usan
+  sólo los episodios reales de `maceta-01` (§3.2).
 - **X sin metadatos de etiqueta:** `modelos.matriz_X` y el notebook descartan
-  explícitamente `etiqueta_origen`, `dudoso`, `episodio_id`, `fuente`, etc.
+  explícitamente `etiqueta_origen`, `dudoso`, `episodio_id`, etc.
   antes de cualquier `fit`.
-- **Datos simulados recalibrados (v2).** Tras la
-  [auditoría de datos](entrega2/AUDITORIA_DATOS.md), el relleno simulado se
-  regeneró con la curva de la sonda de octubre calibrada con lo medido; el
-  modelo final se entrenó con el v2 (`data/sintetico/`, local).
 - **Episodios dudosos:** `EPISODIOS_DUDOSOS = {8, 9, 11, 14}`
-  (`ml/plantaia_ml/datos_reales.py`). Las métricas sobre lo real se reportan
+  (`ml/plantaia_ml/datos_reales.py`). Las métricas se reportan
   con y sin ellos.
 - **Pendientes conocidos que encontró la revisión y no se implementaron:**
   - Firmware 2.0.0 sin **cadencia de 1 min en las ventanas de recuperación**
@@ -322,8 +291,10 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
     inferencia y el LED siguen funcionando).
   - `GET /api/v1/dataset.csv` da **404**, aunque CLAUDE.md lo menciona; el
     volcado que existe es `/api/v1/mediciones.csv`.
-  - Las **184 filas reales posteriores al snapshot** (21/10 21:22 → 22:53 UTC)
-    no tienen episodio y no entran al modelo.
+  - Las **184 filas (5 min) posteriores al snapshot** (21/10 21:25 → 22/10
+    12:40 UTC, `data/mediciones_raw_2026-10-22.csv`) no tienen observación
+    manual y no entran al entrenamiento; se usan sólo como prueba de
+    estabilidad (notebook §6.5: 100 % `saludable`).
 
 ### Lo que sólo puede hacer una persona
 
@@ -342,7 +313,7 @@ mano para ver cambiar el LED, y pegar 10–20 líneas `[INF]` en el informe.
 
 - Python: `/opt/anaconda3/bin/python` (sklearn 1.6.1, pandas 2.2.3). Versiones
   en `ml/requirements.txt`. No instalar paquetes en ese entorno.
-- No tocar `backend/` ni `frontend/`. No mandar nada simulado a Railway.
+- No tocar `backend/` ni `frontend/`. A Railway sólo llega lo que manda la placa.
 - No flashear la placa. `pio run` y `pio test -e native` sí.
 - Los notebooks se commitean **ejecutados**.
 - Español en docs, comentarios y nombres, como el resto del repo.

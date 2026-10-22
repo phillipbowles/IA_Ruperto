@@ -71,19 +71,18 @@ features del contrato §4, `modelos.py` para los candidatos, la partición y el
 costo). Los resultados y el modelo elegido están en el propio notebook y en
 `docs/entrega2/RESULTADOS.md`; este README no los repite.
 
-- **Datos**: la serie de `maceta-01` a 5 min. Si existen los datos simulados
-  locales de `data/sintetico/` (o de `$PLANTAIA_SINTETICO`; no versionados, se
-  regeneran con `cd ml && /opt/anaconda3/bin/python -m plantaia_ml.relleno`,
-  ver [ml/README.md](../ml/README.md)) se suman con su propia `fuente`; sin
-  ellos, el notebook corre sólo con lo medido y los números cambian. La
-  ejecución commiteada usa el relleno simulado **v2**, recalibrado tras
-  [docs/entrega2/AUDITORIA_DATOS.md](../docs/entrega2/AUDITORIA_DATOS.md).
+- **Datos**: sólo lo que midió la placa: la serie de `maceta-01` a 5 min y
+  sus episodios reales de `data/episodios.csv`. Los huecos de la serie quedan
+  como huecos (ENTREGA2.md §3.2).
 - **Protocolo**: partición por episodio (5 folds, ninguno partido entre train
-  y test), búsqueda de hiperparámetros anidada también por episodio. Test
-  externo sobre los episodios medidos (`fuente == 'real'`), con y sin los
-  episodios dudosos (`EPISODIOS_DUDOSOS = {8, 9, 11, 14}`), y la referencia de
-  entrenar sólo con reales, que reproduce el hallazgo del notebook 02.
-- **Baselines**: clase mayoritaria y un umbral único sobre `suelo_mv`.
+  y test), búsqueda de hiperparámetros anidada también por episodio. Las
+  métricas se calculan sobre las predicciones fuera de fold juntas, con un
+  desvío por bootstrap de episodios, y se reportan con y sin los episodios
+  dudosos
+  (`EPISODIOS_DUDOSOS = {8, 9, 11, 14}`), y el N efectivo son los episodios,
+  no las filas.
+- **Baselines**: clase mayoritaria, un umbral único y dos umbrales sobre
+  `suelo_mv`.
 - **Candidatos**: regresión logística, árbol de decisión, Random Forest chico,
   Naive Bayes gaussiano, k-NN, SVM RBF y MLP chico.
 - **Métricas**: exactitud balanceada, F1 macro, recall de `marchita`, matriz de
@@ -94,23 +93,19 @@ costo). Los resultados y el modelo elegido están en el propio notebook y en
   < 32 KB, sin memoria dinámica, < 1 ms por inferencia).
 - **Restricción de diseño**: el semáforo no puede depender sólo de la sonda.
   Todo candidato con selección de features usa `suelo_mv` y al menos una
-  ambiental. La §5.7 compara contra el modelo sólo-suelo anterior
-  (`rf-f0-c42286`) y verifica con filas medidas que la ambiental cambia
-  predicciones. Los baselines siguen siendo sólo `suelo_mv`.
+  ambiental del aire (T, HR o VPD), y se verifica que la ambiental cambie la
+  clase de ≥ 1 % de las filas. **La luz no entra**: con luz el modelo aprende
+  "oscuro → marchita" (§6.3, decidido después de ver resultados). Los
+  baselines siguen siendo sólo `suelo_mv`.
+- **Condición de seguridad** (§5.6): recall de marchita ≥ 0,9 sin dudosos y
+  el ep. 12 bien. Ninguna configuración sin luz la cumple, así que queda la
+  configuración del criterio de §5.3/§5.5.
 - **X sin metadatos**: antes de cualquier `fit`, `X` se arma descartando
   explícitamente la etiqueta y su procedencia, con un `assert` contra el
   contrato §4.
-- **Condición de seguridad**, agregada después de ver resultados (§5.6):
-  - el modelo no puede perder la marchita real: recall de marchita real
-    ≥ 0,9 y el ep. 12 bien;
-  - se elige sobre 165 configuraciones explícitas: regresión logística,
-    árbol, RF chico y Naive Bayes, con suelo + cada ambiental y pares.
-- **Modelo elegido**: `rf-f04-7734f6`, Random Forest de 30 árboles,
-  `max_depth=5`, `min_samples_leaf=20`, con `suelo_mv` y `vpd_kpa`.
-  - El criterio pre-registrado solo elegía el Naive Bayes `nb-f02-fa0df4`,
-    que perdía la marchita de octubre.
-  - Sobre lo real queda a la par o algo mejor que el sólo-suelo y que los
-    dos umbrales (ver `docs/entrega2/RESULTADOS.md`).
+- **Modelo elegido**: su configuración y métricas están en el notebook y en
+  `docs/entrega2/RESULTADOS.md`; la versión exportada, en
+  `PLANTAIA_MODELO_VERSION` de `firmware/lib/plantaia_ml/modelo_plantaia.h`.
 - **Export**: el modelo elegido se escribe en
   `firmware/lib/plantaia_ml/modelo_plantaia.h` con
   `cd ml && /opt/anaconda3/bin/python -m plantaia_ml.exportar_c`.

@@ -10,9 +10,10 @@ Protocolo
 - Partición **por episodio**: un episodio entero queda en train o en test,
   nunca partido (las filas contiguas comparten etiqueta y están muy
   correlacionadas; ver CLAUDE.md). Se usa `StratifiedGroupKFold`, que es
-  `GroupKFold` repartiendo los episodios para que cada fold tenga las tres
-  clases: con `GroupKFold` a secas uno de los 5 folds se queda sin ningún
-  episodio `marchita` y el recall de esa clase no se puede medir ahí.
+  `GroupKFold` repartiendo los episodios lo más parejo posible entre clases.
+  Con 11 episodios cada fold de test tiene 2 o 3 y ninguno tiene las tres
+  clases, así que el notebook calcula las métricas sobre las predicciones
+  fuera de fold juntas, con desvío por bootstrap de episodios.
 - Hiperparámetros con búsqueda **anidada**: adentro de cada fold externo,
   `GridSearchCV` con otra partición por episodio (3 folds) sobre el train.
   El fold externo nunca participa de la elección.
@@ -22,13 +23,13 @@ Protocolo
 Restricción de diseño (2026-10-21): el semáforo no puede depender sólo de la sonda
 -----------------------------------------------------------------------------------
 Todo subconjunto que prueban los candidatos tiene `suelo_mv` (idx 0) **y al
-menos una feature ambiental** (`temp_c` 2, `hum_aire_pct` 3, `vpd_kpa` 4,
-`luz_mv` 5, `luz_media_1h` 6). `suelo_delta_1h` (1) puede sumarse pero no
-cuenta como ambiental: también sale de la sonda. Es una decisión de producto
+menos una feature ambiental del aire** (`temp_c` 2, `hum_aire_pct` 3,
+`vpd_kpa` 4). La luz (5, 6) no entra (ver `IDX_LUZ`). `suelo_delta_1h` (1)
+puede sumarse pero no cuenta como ambiental: también sale de la sonda. Es una decisión de producto
 (el LED tiene que reaccionar al ambiente de la planta, no sólo a la sonda
 resistiva, que deriva), no algo que salga de las métricas: el notebook 03
-compara contra el modelo sólo-suelo de la ejecución anterior (`rf-f0-c42286`)
-y verifica con las filas medidas que la ambiental elegida cambia predicciones.
+compara contra un modelo sólo-suelo y verifica que la ambiental elegida
+cambia predicciones.
 Los baselines (mayoritaria, umbral único y dos umbrales sobre `suelo_mv`) no
 tienen búsqueda y quedan como estaban, como referencia.
 
@@ -36,11 +37,11 @@ X sin metadatos de etiqueta
 ---------------------------
 `matriz_X(df)` arma la matriz de entrada **descartando explícitamente** todas
 las columnas de metadatos (clase en texto, `etiqueta_origen`, `dudoso`,
-`episodio_id`, `fuente`, `warmup`, `ts`, …) antes de quedarse con las 7 del
+`episodio_id`, `warmup`, `ts`, …) antes de quedarse con las 7 del
 contrato §4, y verifica que no quede ninguna otra. Así la procedencia de la
-etiqueta (manual, propagada, simulada, dudosa) no puede entrar al modelo.
-`episodio_id` se usa sólo como grupo de la partición y `fuente` sólo para
-evaluar sobre lo medido.
+etiqueta (manual, propagada, dudosa) no puede entrar al modelo.
+`episodio_id` se usa sólo como grupo de la partición y `dudoso` sólo para
+reportar con y sin los episodios de etiqueta débil.
 """
 from __future__ import annotations
 
@@ -66,21 +67,28 @@ K_INTERNO = 3
 
 # Subconjuntos que prueba la búsqueda interna. Todos cumplen la restricción de
 # diseño (docstring): suelo_mv + al menos una ambiental. Van de lo más simple
-# (suelo + una ambiental) a las 7 features del contrato:
-#   - suelo + cada ambiental (5),
-#   - suelo + delta + cada ambiental (5),
-#   - suelo + cada par de ambientales (10),
-#   - "sin luz" (suelo, delta, T, HR, VPD) y "todas".
+# (suelo + una ambiental) a todas las permitidas:
+#   - suelo + cada ambiental (3),
+#   - suelo + delta + cada ambiental (3),
+#   - suelo + cada par de ambientales (3),
+#   - "sin luz" (suelo, delta, T, HR, VPD).
+# La luz (`luz_mv` 5, `luz_media_1h` 6) NO entra al modelo de la placa: en los
+# episodios medidos la marchita sólo se observó de noche, así que la luz es un
+# proxy de la hora del observador (notebook 03 §6.3). Con ella, el modelo que
+# pasa la condición de seguridad marca `marchita` casi todas las noches sobre
+# datos nuevos de una planta sana. Decisión tomada DESPUÉS de ver resultados
+# (2026-10-22). La placa igual arma los 7 features del contrato §4.
 IDX_SUELO = 0
 IDX_DELTA = 1
-AMBIENTALES = (2, 3, 4, 5, 6)
+IDX_LUZ = (5, 6)
+AMBIENTALES = (2, 3, 4)
 _CORTO = {2: "temp", 3: "hr", 4: "vpd", 5: "luz", 6: "luz1h"}
 
 
 def cumple_restriccion(columnas) -> bool:
-    """suelo_mv y al menos una ambiental (suelo_delta_1h no cuenta como ambiental)."""
+    """suelo_mv, al menos una ambiental y nada de luz (suelo_delta_1h no cuenta como ambiental)."""
     c = set(int(i) for i in columnas)
-    return IDX_SUELO in c and bool(c & set(AMBIENTALES))
+    return IDX_SUELO in c and bool(c & set(AMBIENTALES)) and not c & set(IDX_LUZ)
 
 
 def _armar_subconjuntos() -> dict[str, tuple[int, ...]]:
@@ -93,7 +101,6 @@ def _armar_subconjuntos() -> dict[str, tuple[int, ...]]:
     for a, b in combinations(AMBIENTALES, 2):
         subs[f"suelo+{_CORTO[a]}+{_CORTO[b]}"] = (IDX_SUELO, a, b)
     subs["sin luz"] = (0, 1, 2, 3, 4)
-    subs["todas"] = tuple(range(len(FEATURES)))
     assert all(cumple_restriccion(v) for v in subs.values())
     return subs
 
@@ -131,7 +138,7 @@ class SeleccionFeatures(BaseEstimator, TransformerMixin):
 COLUMNAS_NO_FEATURES = [
     "ts", "ts_iso", "ts_unix", "dispositivo", "boot_id", "tramo", "muestra_id",
     "clase", "clase_codigo", "etiqueta", "etiqueta_origen", "origen", "dudoso", "nota",
-    "episodio_id", "fuente", "warmup", "valido", "post_boot", "suelo_saturado",
+    "episodio_id", "warmup", "valido", "post_boot", "suelo_saturado",
     "errores", "marcas", "flags", "temp_ntc_c",
 ]
 
@@ -210,17 +217,17 @@ def candidatos() -> dict[str, tuple[Pipeline, dict]]:
 
 # ─── Condición de seguridad (agregada después de ver resultados) ─────────
 # Decisión de producto del 2026-10-21, tomada DESPUÉS de ver que el criterio de
-# §5.3 en el espacio restringido elegía un Naive Bayes que perdía la marchita
-# real de octubre (ep. 12). El error caro es no avisar marchita
-# (docs/ENTREGA2.md §5.1), así que un modelo para la placa tiene que cumplir,
-# sobre las filas reales fuera de fold y sin dudosos:
+# §5.3 podía elegir un modelo que perdía la marchita de octubre (ep. 12). El
+# error caro es no avisar marchita (docs/ENTREGA2.md §5.1), así que un modelo
+# para la placa tiene que cumplir, sobre las filas fuera de fold sin dudosos:
 #   - recall de marchita ≥ MIN_RECALL_MARCHITA, y
 #   - el ep. 12 con ≥ MIN_ACIERTO_EP12 de sus filas bien.
 # Junto con la compuerta de influencia ambiental (≥ MIN_CAMBIO_PCT % de filas
-# reales cambian de clase si las ambientales van a su mediana), también fijada
+# cambian de clase si las ambientales van a su mediana), también fijada
 # después de ver resultados. Se evalúa sobre una grilla explícita de
 # configuraciones fijas (`configuraciones_seguridad`), no sobre la búsqueda
-# anidada por tipo.
+# anidada por tipo. Si ninguna la cumple (hoy, sin luz, ninguna), queda la
+# configuración del criterio de §5.3/§5.5.
 MIN_RECALL_MARCHITA = 0.9
 MIN_ACIERTO_EP12 = 0.5
 EP_MARCHITA_OCTUBRE = 12
@@ -230,7 +237,7 @@ MIN_CAMBIO_PCT = 1.0
 def configuraciones_seguridad() -> list[tuple[str, dict]]:
     """Grilla explícita: suelo + cada ambiental y suelo + cada par de ambientales, con
     regresión logística (C 0,01/0,1/1), árbol (prof. 2/3/4, hoja 100), RF chico de 30
-    árboles (prof. 3/5, hoja 20/100) y Naive Bayes. 165 configuraciones."""
+    árboles (prof. 3/5, hoja 20/100) y Naive Bayes. 66 configuraciones."""
     from itertools import combinations
     subs = [(IDX_SUELO, a) for a in AMBIENTALES] + [(IDX_SUELO, a, b) for a, b in combinations(AMBIENTALES, 2)]
     out = []
@@ -314,27 +321,27 @@ def baselines() -> dict[str, tuple[Pipeline, dict]]:
 
 
 def busqueda(est: Pipeline, grilla: dict, n_jobs: int = -1) -> GridSearchCV:
-    """GridSearchCV con partición interna por episodio (hay que pasar `groups` al fit)."""
+    """GridSearchCV con partición interna por episodio (hay que pasar `groups` al fit).
+
+    Con tan pocos episodios reales, algún fold interno puede quedar con una sola
+    clase en el train: esa configuración puntúa NaN en ese fold en vez de cortar.
+    """
     return GridSearchCV(clone(est), grilla, cv=particion_interna(), scoring="f1_macro",
-                        n_jobs=n_jobs, error_score="raise")
+                        n_jobs=n_jobs, error_score=np.nan)
 
 
 # ─── Modelo que va a la placa ─────────────────────────────────────────────
-# Lo elige el notebook 03 (§5.3: costo, F1 por episodio en la serie completa y
-# puntaje sobre los episodios reales; desempate por interpretabilidad) y, dentro
-# del tipo, la configuración más simple a 1 desvío de la mejor de la búsqueda
-# por episodio sobre la serie completa. El notebook avisa si esto deja de
-# coincidir, y `python -m plantaia_ml.exportar_c` lo reentrena con esta
-# configuración. Con la restricción de diseño (suelo + al menos una ambiental)
-# ese criterio elegía un Naive Bayes `suelo+temp` (`nb-f02-fa0df4`) que perdía la
-# marchita real de octubre. Con la condición de seguridad (ver arriba; agregada
-# después de ver resultados) y la compuerta de influencia ambiental, la elección
-# sale de `configuraciones_seguridad()` en el notebook 03 §5.6: un Random Forest
-# de 30 árboles con suelo_mv y vpd_kpa. Antes de la restricción ganaba un RF
-# sólo con suelo_mv (`rf-f0-c42286`).
+# Lo elige el notebook 03 sólo con los episodios medidos: §5.3 (costo, F1 macro
+# fuera de fold sin dudosos dentro de 1 desvío bootstrap del mejor, desempate
+# por interpretabilidad) y, dentro del tipo, la configuración más simple a 1
+# desvío de la mejor de la búsqueda por episodio que además use la ambiental
+# (§5.5). Ninguna configuración sin luz cumple la condición de seguridad de
+# §5.6, así que queda la de §5.5: un árbol de profundidad 2 con suelo_mv,
+# suelo_delta_1h y temp_c. El notebook avisa si esto deja de coincidir, y
+# `python -m plantaia_ml.exportar_c` lo reentrena con esta configuración.
 CONFIG_FINAL = {
-    "tipo": "Random Forest",
-    "params": {"sel__columnas": (0, 4), "clf__max_depth": 5, "clf__min_samples_leaf": 20},
+    "tipo": "Árbol de decisión",
+    "params": {"sel__columnas": (0, 1, 2), "clf__max_depth": 2, "clf__min_samples_leaf": 100},
 }
 
 

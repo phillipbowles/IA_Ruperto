@@ -35,7 +35,7 @@ editar una línea en vez de 300 filas.
 | `dispositivo` | `maceta-01` |
 | `ts_inicio` / `ts_fin` | ISO-8601 **en UTC** (`2026-09-16T15:47:29Z`). Intervalo semiabierto: `ts_fin` no entra |
 | `clase` | `saludable` \| `estresada` \| `marchita` |
-| `origen` | `manual` \| `propagada` \| `corregida` — ver abajo. (`simulada` existe sólo en el `episodios_relleno.csv` local de los datos simulados, ver más abajo) |
+| `origen` | `manual` \| `propagada` \| `corregida` — ver abajo |
 | `autor`, `nota` | Quién y por qué. La nota importa más de lo que parece |
 
 Dos episodios del mismo dispositivo **no pueden pisarse en el tiempo**. No hay
@@ -161,25 +161,10 @@ el NTC está del lado de VCC del divisor y no del de GND como asume la fórmula 
 `main.cpp`: la conversión refleja la temperatura alrededor de ~25 °C. Hasta
 corregirlo, `temp_ntc_c` no sirve como temperatura (ni como respaldo del DHT11).
 
-## Filas con `firmware_version = "relleno"`
+## Huecos de la serie
 
 La serie de maceta-01 tiene tramos sin registro de la placa (reinicios, cortes
-de luz y las dos semanas del 03/10 al 18/10). Esos tramos se completaron **a
-posteriori con un simulador** calibrado con las mediciones reales, a 30 s como
-el resto de la base. Son **datos simulados (calibrados con lo medido)**, no
-mediciones: cada fila lleva `firmware_version = "relleno"` y
-`etiqueta_origen = "simulada"`, y sus episodios (ids 2000+)
-`origen = "simulada"` con la nota que lo explica. No hay pulsaciones de botón
-simuladas.
-
-- `simulada` es un valor propio de `origen`, distinto de `manual`,
-  `propagada` y `corregida`: `corregida` es sólo el reetiquetado hecho por una
-  persona (como el episodio 1, que sí es medido).
-- Viven sólo en el archivo local `data/sintetico/` (en `.gitignore`) y **no
-  se mandan a Railway**. Si un snapshot de Railway trajera filas con
-  `firmware_version = "relleno"` o `etiqueta_origen = "simulada"`,
-  `serie_maceta01()` levanta un error.
-- `ml/plantaia_ml/dataset.py` las marca con `fuente = "simulada_relleno"`;
-  cualquier resultado "sobre la planta" se reporta filtrando `fuente == "real"`.
-- Cómo se generaron, con qué calibración y qué limitaciones tienen: README
-  local de `data/sintetico/` (no se versiona) y el informe de la Tarea 2.
+de luz y las dos semanas del 03/10 al 18/10). **Esos tramos quedan como
+huecos**: no se completan ni se interpolan. Las features cortan la ventana en
+cada hueco y en cada cambio de `boot_id` (contrato de ENTREGA2.md §4), igual
+que el buffer de la placa, y el modelo se entrena y evalúa sólo con lo medido.

@@ -115,18 +115,16 @@ usan igual la placa y el replay):
 
 ## 4. Costo en memoria y CPU
 
-Medido con `pio run -e esp32dev` (2026-10-21) con el modelo final
-`rf-f04-7734f6`: Random Forest de 30 árboles, `max_depth=5`,
-`min_samples_leaf=20`, con `suelo_mv` y `vpd_kpa`. Ver la restricción de
-diseño y la condición de seguridad en `docs/entrega2/RESULTADOS.md`.
+Medido con `pio run -e esp32dev` (2026-10-22) con el modelo final
+`arbol-p2-f012-58e644`: árbol de decisión de profundidad 2
+(`min_samples_leaf=100`), entrenado con `suelo_mv`, `suelo_delta_1h` y
+`temp_c` (el árbol sólo corta por `temp_c` y `suelo_mv`). Ver la restricción
+de diseño y la condición de seguridad en `docs/entrega2/RESULTADOS.md`.
 
-| | antes (fw 1.1.0) | después (fw 2.0.0 + `rf-f04-7734f6`) | diferencia |
+| | antes (fw 1.1.0) | después (fw 2.0.0 + `arbol-p2-f012-58e644`) | diferencia |
 |---|---|---|---|
 | RAM estática | 47 548 B | 47 740 B (14,6 %) | **+192 B** |
-| Flash | 957 897 B | 986 097 B (75,2 %) | **+28 200 B** |
-
-Con los modelos anteriores, la flash era 986 961 B con el RF sólo-suelo
-`rf-f0-c42286` y 963 625 B con el Naive Bayes `nb-f02-fa0df4`.
+| Flash | 957 897 B | 962 249 B (73,4 % de 1 310 720 B) | **+4 352 B** |
 
 - **RAM estática.** `BufferFeatures` 124 B + `Inferencia` 56 B (+ alineación).
   Sin memoria dinámica. El modelo no suma RAM estática: sus tablas son
@@ -135,24 +133,28 @@ Con los modelos anteriores, la flash era 986 961 B con el RF sólo-suelo
   - La copia del buffer en `features_consultar()`: 124 B, sólo en el envío
     forzado.
   - La línea de log: 200 B.
-  - ~28 B de RAM del modelo durante la predicción (estimación de
-    `docs/entrega2/RESULTADOS.md`).
-- **Flash del modelo: 23 790 B de tablas** en el header exportado (23 730 B según la estimación de `costo_esp32`, que no cuenta las 30 raíces), dentro del presupuesto de 32 KB.
-  - 1570 nodos: feature `int8`, umbral `float`, hijos `int16`.
-  - 800 hojas × 3 probabilidades `float`.
-  - El resto de la diferencia es el código de la librería (`features.cpp`,
-    `inferencia.cpp`), `expf` y el formateo de floats que trae libc.
+  - ~16 B de RAM del modelo durante la predicción (estimación de
+    `costo_esp32`, `docs/entrega2/RESULTADOS.md`).
+- **Flash del modelo: 81 B de tablas** en el header exportado (igual a la
+  estimación de `costo_esp32` y a `exportar_c.bytes_parametros_c`), muy por
+  debajo del presupuesto de 32 KB.
+  - 5 nodos (2 internos y 3 hojas), profundidad 2: feature `int8`, umbral
+    `float`, hijos `int16`.
+  - 3 hojas × 3 probabilidades `float`.
+  - El resto de la diferencia de flash es el código de la librería
+    (`features.cpp`, `inferencia.cpp`), `expf` y el formateo de floats que
+    trae libc.
 - **CPU por tick.**
-  - 13 sumas para la media de luz y un `expf` para el VPD.
-  - El modelo: 30 recorridos de ≤ 5 comparaciones más el promedio de 30
-    hojas, **~390 operaciones** por predicción (~16 µs estimados en la ESP32,
-    según `docs/entrega2/RESULTADOS.md`).
+  - 13 sumas para la media de luz y un `expf` para el VPD (la placa arma
+    siempre los 7 features, aunque el modelo use menos).
+  - El modelo: un recorrido iterativo de **≤ 2 comparaciones** hasta la hoja
+    y el argmax de 3 probabilidades (`costo_esp32` estima 4 operaciones,
+    ~0,17 µs en la ESP32).
   - El presupuesto del contrato (§5.3) es **< 1 ms por inferencia** y
     **< 32 KB de flash** para el modelo.
 - **Tiempo medido en el host, no en la placa**
   (`docs/entrega2/logs/replay_host.txt`, 150 inferencias):
-  - `t_us` de 0–2 µs, mediana 1 µs;
-  - 26 µs en la primera llamada, en frío.
+  `t_us` de 0–1 µs (113 en 0 µs, 37 en 1 µs; máximo 1 µs).
 
   El número real de la ESP32 sale del log de la placa (`t_us` en cada
   `[INF]`), pendiente de flashear.
@@ -249,13 +251,13 @@ tools/correr_replay.sh                # replay → docs/entrega2/logs/replay_hos
   `tools/generar_replay.py` desde un CSV crudo remuestreado a 5 min (mediana
   por bin). Un bin vacío o un cambio de `boot_id` corta la ventana (vacía el
   buffer), igual que `asignar_tramos()` en `ml/plantaia_ml/features.py`. El
-  tramo por defecto (19/10 14:00Z, 150 muestras) cruza un riego. Para agregar
-  el tramo simulado:
+  tramo por defecto (19/10 14:00Z, 150 muestras) cruza un riego. Se pueden
+  sumar otros tramos medidos repitiendo `--tramo`:
 
   ```bash
   /opt/anaconda3/bin/python firmware/tools/generar_replay.py \
       --tramo data/mediciones_raw_2026-10-21.csv maceta-01 2026-10-19T14:00Z 150 \
-      --tramo data/sintetico/mediciones_sim.csv.gz sim-01 <desde> 150
+      --tramo data/mediciones_raw_2026-10-21.csv maceta-01 <desde> 150
   firmware/tools/correr_replay.sh
   ```
 

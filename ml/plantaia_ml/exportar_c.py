@@ -502,9 +502,9 @@ def metricas_cv(df: pd.DataFrame) -> dict:
 
     Primero las de la **configuración final fija** (`CONFIG_FINAL`, sin búsqueda: es
     exactamente el modelo que va a la placa), después las de la **búsqueda anidada del
-    tipo** (como la tabla por tipo del notebook). Para cada una, media ± desvío por fold
-    sobre la serie completa y las métricas sobre las filas reales fuera de fold (con y
-    sin dudosos): la serie completa mide sobre todo al simulador.
+    tipo** (como la tabla por tipo del notebook). Para cada una, las métricas sobre las
+    predicciones fuera de fold juntas, con y sin dudosos: con 2 o 3 episodios por fold de
+    test, ningún fold tiene las tres clases y una media por fold no significa nada.
     """
     from .modelos import CONFIG_FINAL, busqueda, candidatos, modelo_final, particion_externa
     X = matriz_X(df)   # sin metadatos de etiqueta (modelos.matriz_X)
@@ -517,26 +517,17 @@ def metricas_cv(df: pd.DataFrame) -> dict:
             ("config. final fija", lambda tr: modelo_final().fit(X[tr], y[tr])),
             (f"búsqueda anidada del tipo {CONFIG_FINAL['tipo']}",
              lambda tr: busqueda(est, grilla, n_jobs=1).fit(X[tr], y[tr], groups=g[tr]))]:
-        f1, ba, rm = [], [], []
         oof = np.zeros(len(y), int)
         for tr, te in folds:
-            p = ajustar(tr).predict(X[te])
-            oof[te] = p
-            f1.append(f1_score(y[te], p, average="macro"))
-            ba.append(balanced_accuracy_score(y[te], p))
-            rm.append(recall_score(y[te], p, labels=[3], average="macro"))
-        out[f"[{rotulo}] f1_macro"] = (np.mean(f1), np.std(f1))
-        out[f"[{rotulo}] exactitud_balanceada"] = (np.mean(ba), np.std(ba))
-        out[f"[{rotulo}] recall_marchita"] = (np.mean(rm), np.std(rm))
-        if "fuente" in df:
-            real = (df.fuente == "real").to_numpy()
-            for nombre, m in [("reales", real), ("reales sin dudosos", real & ~df.dudoso.to_numpy(bool))]:
-                if m.any():
-                    n_ep = df.loc[m, "episodio_id"].nunique()
-                    out[f"[{rotulo}] f1_macro {nombre} fuera de fold ({n_ep} ep.)"] = f1_score(
-                        y[m], oof[m], labels=[1, 2, 3], average="macro", zero_division=0)
-                    out[f"[{rotulo}] exactitud_balanceada {nombre} fuera de fold ({n_ep} ep.)"] = \
-                        balanced_accuracy_score(y[m], oof[m])
+            oof[te] = ajustar(tr).predict(X[te])
+        for nombre, m in [("todos", np.ones(len(y), bool)), ("sin dudosos", ~df.dudoso.to_numpy(bool))]:
+            n_ep = df.loc[m, "episodio_id"].nunique()
+            out[f"[{rotulo}] f1_macro {nombre}, filas fuera de fold juntas ({n_ep} ep.)"] = f1_score(
+                y[m], oof[m], labels=[1, 2, 3], average="macro", zero_division=0)
+            out[f"[{rotulo}] exactitud_balanceada {nombre}, filas fuera de fold juntas ({n_ep} ep.)"] = \
+                balanced_accuracy_score(y[m], oof[m])
+            out[f"[{rotulo}] recall_marchita {nombre}, filas fuera de fold juntas ({n_ep} ep.)"] = recall_score(
+                y[m], oof[m], labels=[3], average="macro", zero_division=0)
     return out
 
 
