@@ -18,6 +18,9 @@ server {
     }
 
     location /api/ {
+        # El default de nginx es 1 MB: una foto del celular para el análisis
+        # con IA lo supera aunque el front la achique.
+        client_max_body_size 6m;
         # Con un host literal en proxy_pass, nginx resuelve una sola vez al
         # arrancar y se muere si el DNS todavia no responde — que es justo lo
         # que pasa con *.railway.internal, que tarda en estar listo. Poniendo la

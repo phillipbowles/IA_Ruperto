@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { obtener } from "./api/cliente";
 import type { Medicion } from "./tipos";
@@ -12,6 +12,7 @@ import { DonutEtiquetas } from "./componentes/DonutEtiquetas";
 import { DispersionTemp } from "./componentes/DispersionTemp";
 import { TablaRegistros } from "./componentes/TablaRegistros";
 import { AvatarLirio } from "./componentes/AvatarLirio";
+import { AnalisisFoto } from "./componentes/AnalisisFoto";
 
 const RANGOS = [
   { id: "24h", texto: "24 h", ms: 24 * 3600e3 },
@@ -19,7 +20,55 @@ const RANGOS = [
   { id: "todo", texto: "Todo", ms: Infinity },
 ] as const;
 
+const VISTAS = [
+  { id: "panel", texto: "Panel de sensores" },
+  { id: "foto", texto: "Analizar foto" },
+] as const;
+type Vista = (typeof VISTAS)[number]["id"];
+
+// La vista vive en el hash (#foto) para que se pueda compartir el link y el
+// botón «atrás» del navegador vuelva al panel. nginx ni se entera.
+const vistaDelHash = (): Vista => (location.hash === "#foto" ? "foto" : "panel");
+
 export function App() {
+  const [vista, setVista] = useState<Vista>(vistaDelHash);
+
+  useEffect(() => {
+    const alCambiar = () => setVista(vistaDelHash());
+    window.addEventListener("hashchange", alCambiar);
+    return () => window.removeEventListener("hashchange", alCambiar);
+  }, []);
+
+  return (
+    <main className="pagina">
+      <nav className="filtros pestanas" aria-label="Secciones">
+        {VISTAS.map((v) => (
+          <button key={v.id} aria-pressed={vista === v.id}
+                  onClick={() => { location.hash = v.id === "panel" ? "" : v.id; }}>
+            {v.texto}
+          </button>
+        ))}
+      </nav>
+      {vista === "foto" ? <VistaFoto /> : <Tablero />}
+    </main>
+  );
+}
+
+function VistaFoto() {
+  return (
+    <>
+      <header className="cabecera">
+        <div>
+          <h1>PlantaIa</h1>
+          <p className="sub">Lirio de paz · diagnóstico a partir de una foto</p>
+        </div>
+      </header>
+      <AnalisisFoto />
+    </>
+  );
+}
+
+function Tablero() {
   const [rango, setRango] = useState<string>("24h");
 
   const { data, isPending, error } = useQuery({
@@ -43,9 +92,9 @@ export function App() {
   const noche = useMemo(() => bandasNoche(puntos), [puntos]);
   const horas = useMemo(() => porHora(puntos), [puntos]);
 
-  if (isPending) return <main className="pagina"><p className="cargando">Cargando mediciones…</p></main>;
-  if (error) return <main className="pagina"><p className="error">{(error as Error).message}</p></main>;
-  if (!res.total) return <main className="pagina"><p className="cargando">Todavía no hay mediciones.</p></main>;
+  if (isPending) return <p className="cargando">Cargando mediciones…</p>;
+  if (error) return <p className="error">{(error as Error).message}</p>;
+  if (!res.total) return <p className="cargando">Todavía no hay mediciones.</p>;
 
   const u = res.ultima!;
   const avisos = [
@@ -72,7 +121,7 @@ export function App() {
   ].filter(Boolean) as { nivel: string; chip: string; texto: string }[];
 
   return (
-    <main className="pagina">
+    <>
       <header className="cabecera">
         <div>
           <h1>PlantaIa</h1>
@@ -89,11 +138,19 @@ export function App() {
         </div>
       </header>
 
-      <AvatarLirio
-        estado={u.condicion_etiqueta === "sin_etiquetar" ? null : u.condicion_etiqueta}
-        origen={u.etiqueta_origen}
-        ts={u.ts_servidor}
-      />
+      {u.prediccion_etiqueta && u.modelo_version ? (
+        <AvatarLirio
+          estado={u.prediccion_etiqueta}
+          fuente={{ tipo: "modelo", version: u.modelo_version, proba: u.prediccion_proba }}
+          ts={u.ts_servidor}
+        />
+      ) : (
+        <AvatarLirio
+          estado={u.condicion_etiqueta === "sin_etiquetar" ? null : u.condicion_etiqueta}
+          fuente={{ tipo: "boton", origen: u.etiqueta_origen }}
+          ts={u.ts_servidor}
+        />
+      )}
 
       <div className="kpis">
         <Kpi etiqueta="Muestras" valor={res.total.toLocaleString("es-AR")}
@@ -187,6 +244,6 @@ export function App() {
         fw {u.firmware_version ?? "?"} · boot {u.boot_id ?? "?"} · muestra {u.numero_muestra} ·{" "}
         <a href="/api/v1/mediciones.csv">descargar CSV</a>
       </footer>
-    </main>
+    </>
   );
 }

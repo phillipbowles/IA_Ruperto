@@ -374,10 +374,11 @@ ESP32 cada 5 min: leer ─► buffer de 1 h ─► features ─► plantaia_pred
   `ml/plantaia_ml/exportar_c.py`. **Cada reentrenamiento obliga a reflashear**:
   es el costo de esta opción.
 - La predicción viaja en el mismo POST: `prediccion_codigo`,
-  `prediccion_etiqueta`, `prediccion_proba` y `modelo_version`. El backend
-  **hoy la ignora** (Pydantic descarta los campos que no conoce). Persistirla en
-  la tabla `predicciones` de §3.4, con su migración de Alembic, queda como
-  mejora futura y no es parte de la Tarea 2.
+  `prediccion_etiqueta`, `prediccion_proba` y `modelo_version`. El backend la
+  guarda en la tabla `predicciones` de §3.4 (migración `0004`), separada de la
+  etiqueta humana, y `GET /mediciones` la devuelve junto a cada muestra: es lo
+  que muestra el avatar del front. Sin predicción (firmware 1.x o sin DHT11) el
+  avatar cae a la etiqueta del botón y lo aclara.
 
 Por qué cambió frente al diseño anterior:
 

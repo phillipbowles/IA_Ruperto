@@ -1,4 +1,6 @@
-from sqlalchemy import JSON, BigInteger, Column, DateTime, Float, Integer, String, UniqueConstraint
+from sqlalchemy import (JSON, BigInteger, Column, DateTime, Float, ForeignKey, Integer, String,
+                        UniqueConstraint)
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from .database import Base
@@ -51,6 +53,57 @@ class Medicion(Base):
 
     __table_args__ = (
         UniqueConstraint("dispositivo", "numero_muestra", name="uq_dispositivo_muestra"),
+    )
+
+    # selectin: una sola query extra con IN para toda la lista, en vez de una
+    # por fila al serializar /mediciones.
+    predicciones = relationship(
+        "Prediccion", lazy="selectin", order_by="Prediccion.id", passive_deletes=True
+    )
+
+    # Lo que expone la API: la predicción más reciente de esta muestra. La placa
+    # manda una sola por muestra; la tabla admite más (una por modelo_version).
+    @property
+    def _ultima_prediccion(self):
+        return self.predicciones[-1] if self.predicciones else None
+
+    @property
+    def prediccion_etiqueta(self):
+        p = self._ultima_prediccion
+        return p.clase if p else None
+
+    @property
+    def prediccion_proba(self):
+        p = self._ultima_prediccion
+        return p.proba if p else None
+
+    @property
+    def modelo_version(self):
+        p = self._ultima_prediccion
+        return p.modelo_version if p else None
+
+
+class Prediccion(Base):
+    """Salida del modelo que corre en la placa (docs/ARQUITECTURA.md §3.4).
+
+    **Nunca** en la misma columna que la etiqueta humana: si se mezclan, nadie
+    puede decir después cuál dato fue observación y cuál el modelo
+    prediciéndose a sí mismo.
+    """
+
+    __tablename__ = "predicciones"
+
+    id = Column(Integer, primary_key=True)
+    medicion_id = Column(
+        Integer, ForeignKey("mediciones.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    modelo_version = Column(String(40), nullable=False)
+    clase = Column(String(30), nullable=False)
+    proba = Column(Float, nullable=True)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("medicion_id", "modelo_version", name="uq_prediccion_medicion_modelo"),
     )
 
 

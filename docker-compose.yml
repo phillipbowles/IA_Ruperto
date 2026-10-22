@@ -47,6 +47,7 @@ services:
       MAX_PHOTO_BYTES: ${MAX_PHOTO_BYTES:-2097152}
       PHOTO_STORAGE_DIR: ${PHOTO_STORAGE_DIR:-/data/fotos}
       CORS_ORIGENES:  ${CORS_ORIGENES:-http://localhost:5173}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ENVIRONMENT:    development
     ports:
       - "${BACKEND_PORT:-8000}:8000"

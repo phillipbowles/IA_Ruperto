@@ -17,3 +17,17 @@ export async function obtener<T>(ruta: string): Promise<T> {
   }
   return r.json() as Promise<T>;
 }
+
+export async function enviarImagen<T>(ruta: string, imagen: Blob): Promise<T> {
+  const r = await fetch(`/api/v1${ruta}`, {
+    method: "POST",
+    headers: { "Content-Type": imagen.type, Accept: "application/json" },
+    body: imagen,
+  });
+  if (!r.ok) {
+    // El backend explica el motivo en `detail` (503 sin clave, 413, 429…).
+    const cuerpo = await r.json().catch(() => null);
+    throw new ErrorApi(r.status, cuerpo?.detail ?? `La API respondió ${r.status}`);
+  }
+  return r.json() as Promise<T>;
+}
