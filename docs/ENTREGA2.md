@@ -25,8 +25,8 @@ Fecha de arranque: 2026-10-21.
 | Actuador físico | Semáforo LED = predicción del modelo | GPIO 25/26/27 |
 | Documentar la lógica en el micro | | `firmware/lib/plantaia_ml/README.md` |
 | Discusión (ventajas, límites, memoria/CPU, mejoras) | | informe + notebook §7 |
-| Informe PDF ≤ 3 páginas | Fuente + PDF | `docs/entrega2/informe/` (fuente, en curso) → `docs/entrega2/Informe_Tarea2_PlantaIa.pdf` |
-| Logs de inferencia en tiempo real | Replay en host + captura de la placa | `docs/entrega2/logs/` |
+| Informe PDF ≤ 3 páginas | Fuente + PDF | `docs/entrega2/informe/` (fuera del repo) |
+| Logs de inferencia en tiempo real | Replay en host (la placa no se reflasheó) | `docs/entrega2/logs/replay_host.txt` |
 
 ---
 
@@ -280,9 +280,9 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
 | B2 | Test externo en reales, costo en la ESP32, selección justificada | modelos | ✅ |
 | B3 | `exportar_c.py` → `modelo_plantaia.h` + vectores de paridad | modelos | ✅ |
 | I1 | `pio test -e native` y `pio run` en verde con el modelo real | integración | ✅ |
-| D1 | Informe ≤ 3 págs. en PDF + figuras + logs | informe | en curso |
+| D1 | Informe ≤ 3 págs. en PDF + figuras + logs | informe | fuera del repo |
 | D2 | Actualizar CLAUDE.md, ARQUITECTURA.md §7, READMEs | integración | ✅ |
-| M1 | **Flashear la placa** y capturar el log real de inferencia | **Manuel** | ☐ |
+| M1 | ~~Flashear la placa y capturar el log real de inferencia~~ | **Manuel** | descartado (2026-10-22): la placa sigue con 1.1.0 |
 | M2 | Calibración semanal de la sonda (sigue pendiente en CALIBRACION.md) | **Manuel** | ☐ |
 
 ### Estado al 2026-10-21
