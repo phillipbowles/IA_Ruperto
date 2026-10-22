@@ -24,6 +24,7 @@ dependencies = [
     # Visión por computadora clásica del análisis de fotos (app/vision.py).
     "numpy>=1.26",
     "pillow>=10.0",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
