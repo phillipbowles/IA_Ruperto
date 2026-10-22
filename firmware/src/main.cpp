@@ -10,9 +10,15 @@
 #include <time.h>
 #include "secrets.h"
 
+// Inferencia en la placa (Tarea 2): C++ puro en lib/plantaia_ml, el mismo
+// código que corren los tests y el replay en el host. Ver su README.md.
+#include "features.h"
+#include "inferencia.h"
+
 // Versión del firmware: viaja en cada muestra para poder separar en el análisis
 // los datos tomados antes y después de un cambio de calibración o de lógica.
-#define FW_VERSION "1.1.0"
+// 2.0.0: el semáforo pasa a ser la salida del modelo que corre en la placa.
+#define FW_VERSION "2.0.0"
 
 // ─── Pines (fijo, ver CLAUDE.md — no cambiar) ─────────────────────────────
 #define PIN_LUZ          34
@@ -35,6 +41,7 @@
 #define TIMEOUT_WIFI      15000UL
 #define DEBOUNCE_MS          50UL
 #define PULSACION_LARGA    2000UL
+#define MOSTRAR_OBS_MS     3000UL          // cuánto queda en el LCD la observación manual
 
 // ─── Calibración sensores ──────────────────────────────────────────────────
 // OJO: el ADC del ESP32 con atenuación 11 dB satura cerca de 3100 mV y la curva
@@ -113,6 +120,17 @@ bool          boton_prev   = false;
 String        estado_nube  = "---";
 Sensores      s;
 
+// ─── Estado de la inferencia ──────────────────────────────────────────────
+// La ventana de 1 h vive en RAM: un reinicio la vacía y se vuelve a warm-up,
+// igual que el Python que corta los tramos por boot_id.
+BufferFeatures buf_feat;
+Inferencia     inf_ult;              // última predicción (tick o consulta)
+bool           hay_inf      = false; // ¿ya se intentó inferir al menos una vez?
+bool           primer_tick  = true;  // inferir ya en el primer loop, sin esperar 5 min
+unsigned long  t_msg_obs    = 0;     // momento en que se mostró la observación manual
+bool           msg_obs      = false;
+bool           lcd_pagina   = false; // alterna la 2da línea: suelo/nube ↔ T/H
+
 // ─── Hora sincronizada? ───────────────────────────────────────────────────
 bool hora_valida() {
   return time(nullptr) > (time_t)EPOCH_MINIMO_VALIDO;
@@ -183,24 +201,97 @@ void leer_sensores() {
   // que no mandar nada.
 }
 
+// ─── Muestra para el modelo ───────────────────────────────────────────────
+// Traduce la lectura a lo que entra al buffer. Faltante = NAN, nunca 0.
+// La sonda de suelo saturada contra un riel del ADC (suelo_raw 0 ó 4095) es la
+// sonda fuera del sustrato: se trata como faltante y el buffer repite el valor
+// anterior (el Python descarta esas filas por la misma razón). La luz saturada
+// NO es faltante: es luz fuerte de verdad. Sin DHT11 válido desde el arranque
+// no se infiere: el termistor no es respaldo de T (y tampoco habría HR).
+MuestraCruda muestra_cruda() {
+  MuestraCruda m;
+  bool suelo_sat = s.suelo_raw <= 0 || s.suelo_raw >= 4095;
+  m.suelo_mv     = suelo_sat ? NAN : s.suelo_mv;
+  m.luz_mv       = s.luz_mv;
+  m.temp_dht_c   = s.dht_ok ? s.temp_dht : NAN;
+  m.hum_aire_pct = s.dht_ok ? s.hum_aire : NAN;
+  m.temp_ntc_c   = s.ntc_ok ? s.temp_ntc : NAN;   // no entra a las features (contrato §4)
+  return m;
+}
+
+static uint32_t reloj_micros() { return (uint32_t)micros(); }
+
 // ─── Semáforo ─────────────────────────────────────────────────────────────
+// Refleja la PREDICCIÓN del modelo, no la observación manual (eso es el botón).
+// Sin predicción (todavía no se infirió, o el vector quedó incompleto: p. ej.
+// nunca respondió el DHT11) quedan los tres APAGADOS. Se eligió apagado y no
+// rojo parpadeando porque el rojo es "marchita": un rojo por falta de datos
+// haría regar una planta que puede estar bien. El LCD dice "Pred:sin datos" y
+// el arranque hace una prueba de lámparas, así que "apagado" no se confunde
+// con "placa muerta".
 void actualizar_semaforo() {
-  digitalWrite(PIN_LED_VERDE,    condicion == 1);
-  digitalWrite(PIN_LED_AMARILLO, condicion == 2);
-  digitalWrite(PIN_LED_ROJO,     condicion == 3 || condicion == 0);
+  int c = (hay_inf && inf_ult.ok) ? inf_ult.clase : 0;
+  digitalWrite(PIN_LED_VERDE,    c == 1);
+  digitalWrite(PIN_LED_AMARILLO, c == 2);
+  digitalWrite(PIN_LED_ROJO,     c == 3);
+}
+
+// ─── Inferencia ───────────────────────────────────────────────────────────
+// empujar = true  → tick de 5 min: la muestra entra a la ventana de 1 h.
+// empujar = false → envío forzado: se predice con la lectura actual pero la
+//                   ventana NO avanza (ver README de lib/plantaia_ml).
+// No depende del WiFi: se llama antes del POST y el LED se actualiza aunque
+// el envío falle.
+void inferir(bool empujar) {
+  MuestraCruda m = muestra_cruda();
+  plantaia_inferir(&buf_feat, &m, empujar, reloj_micros, &inf_ult);
+  hay_inf = true;
+  actualizar_semaforo();
+
+  char linea[200];
+  if (plantaia_linea_fal(&inf_ult, linea, sizeof(linea)) > 0) Serial.println(linea);
+  // [INF] = tick de 5 min (serie regular, la que se parsea); [CON] = consulta
+  // por envío forzado, mismo formato pero con otro prefijo para no mezclarlas.
+  plantaia_linea_inf(&inf_ult, empujar ? "[INF]" : "[CON]", linea, sizeof(linea));
+  Serial.println(linea);
 }
 
 // ─── LCD ──────────────────────────────────────────────────────────────────
+// Línea 0: la predicción del modelo ('*' al final = warm-up, < 1 h de historia).
+// Línea 1: alterna cada refresco entre suelo + estado de la nube y T/H.
 void actualizar_lcd() {
-  char l0[17], l1[17];
-  if (s.dht_ok)
-    snprintf(l0, sizeof(l0), "T:%.1fC H:%.0f%%", s.temp_dht, s.hum_aire);
-  else
-    snprintf(l0, sizeof(l0), "T:--- H:---     ");
-  snprintf(l1, sizeof(l1), "S:%.0fmv %-6s", s.suelo_mv, estado_nube.c_str());
+  // Mientras se muestra la observación manual recién marcada, no pisarla.
+  if (msg_obs && millis() - t_msg_obs < MOSTRAR_OBS_MS) return;
+  msg_obs = false;
+
+  char l0[17], l1[17], tmp[17];
+  if (!hay_inf)          snprintf(tmp, sizeof(tmp), "Pred:---");
+  else if (!inf_ult.ok)  snprintf(tmp, sizeof(tmp), "Pred:sin datos");
+  else                   snprintf(tmp, sizeof(tmp), "Pred:%s%s", plantaia_etiqueta(inf_ult.clase),
+                                  inf_ult.warmup ? "*" : "");
+  snprintf(l0, sizeof(l0), "%-16s", tmp);
+
+  if (lcd_pagina) {
+    if (s.dht_ok) snprintf(tmp, sizeof(tmp), "T:%.1fC H:%.0f%%", s.temp_dht, s.hum_aire);
+    else          snprintf(tmp, sizeof(tmp), "T:--- H:---");
+  } else {
+    snprintf(tmp, sizeof(tmp), "S:%.0fmv %-6s", s.suelo_mv, estado_nube.c_str());
+  }
+  snprintf(l1, sizeof(l1), "%-16s", tmp);
+  lcd_pagina = !lcd_pagina;
 
   lcd.setCursor(0, 0); lcd.print(l0);
   lcd.setCursor(0, 1); lcd.print(l1);
+}
+
+// Muestra la condición manual recién elegida con el botón (no toca el semáforo).
+void mostrar_obs_manual() {
+  char l1[17];
+  snprintf(l1, sizeof(l1), "%-16s", ETIQUETAS[condicion]);
+  lcd.setCursor(0, 0); lcd.print("Obs manual:     ");
+  lcd.setCursor(0, 1); lcd.print(l1);
+  t_msg_obs = millis();
+  msg_obs   = true;
 }
 
 // ─── WiFi ─────────────────────────────────────────────────────────────────
@@ -231,6 +322,9 @@ bool enviar() {
 
   WiFiClientSecure client;
   client.setInsecure();   // Railway usa TLS válido; para mayor seguridad cargar CA raíz
+  // El handshake TLS por defecto espera hasta 120 s: con la red mala eso frena
+  // el loop (botón y LCD) mucho más que los 15 s del resto del POST.
+  client.setHandshakeTimeout(15);   // en segundos
   HTTPClient http;
   http.begin(client, API_URL);
   http.addHeader("Content-Type", "application/json");
@@ -278,6 +372,21 @@ bool enviar() {
   doc["etiqueta_origen"]    = etiqueta_nueva ? "manual" : "propagada";
   doc["wifi_rssi"] = WiFi.RSSI();
 
+  // Salida del modelo que corre en la placa (Tarea 2). El backend por ahora la
+  // ignora (MedicionIn no la declara y pydantic descarta lo que sobra);
+  // persistirla es una mejora pendiente — ver docs/ENTREGA2.md §1.
+  bool pred_ok = hay_inf && inf_ult.ok;
+  if (pred_ok) {
+    doc["prediccion_codigo"]   = inf_ult.clase;
+    doc["prediccion_etiqueta"] = plantaia_etiqueta(inf_ult.clase);
+    doc["prediccion_proba"]    = roundf(inf_ult.proba[inf_ult.clase - 1] * 1000) / 1000.0f;
+  } else {
+    doc["prediccion_codigo"]   = nullptr;   // sin predicción: null, nunca 0
+    doc["prediccion_etiqueta"] = nullptr;
+    doc["prediccion_proba"]    = nullptr;
+  }
+  doc["modelo_version"] = plantaia_modelo_version();
+
   // Diagnóstico real: si un sensor falló hay que poder saber por qué, no solo
   // encontrar la celda vacía dos semanas después.
   JsonArray errores = doc["errores"].to<JsonArray>();
@@ -288,6 +397,7 @@ bool enviar() {
   // flotante del ESP32 lee ruido, no cero).
   if (s.luz_raw   <= 0 || s.luz_raw   >= 4095) errores.add("luz_saturada");
   if (s.suelo_raw <= 0 || s.suelo_raw >= 4095) errores.add("suelo_saturado");
+  if (!pred_ok)       errores.add("sin_prediccion");
 
   String body;
   serializeJson(doc, body);
@@ -328,11 +438,12 @@ void manejar_boton() {
       condicion      = (condicion + 1) % N_COND;
       etiqueta_nueva = true;
       // Persistido: sin esto, cualquier corte de luz devolvía la etiqueta a
-      // sin_etiquetar en silencio y el semáforo quedaba en rojo hasta que
-      // alguien pasara por la maceta.
+      // sin_etiquetar en silencio.
       prefs.putInt("condicion", condicion);
       Serial.printf("Cond → %s (manual)\n", ETIQUETAS[condicion]);
-      actualizar_semaforo();
+      // Desde 2.0.0 el semáforo es la salida del modelo: la observación manual
+      // sólo se muestra en el LCD un momento y viaja en el próximo POST.
+      mostrar_obs_manual();
     } else if (dur >= PULSACION_LARGA) {
       Serial.println("Envio forzado por boton");
       forzar_envio = true;
@@ -366,10 +477,20 @@ void setup() {
   n_muestra = prefs.getUInt("n_muestra", 0);
   boot_id   = prefs.getUInt("boot_id",   0) + 1;
   condicion = prefs.getInt("condicion",  0);   // sobrevive a los reinicios
+  if (condicion < 0 || condicion >= N_COND) condicion = 0;   // NVS corrupta → índice fuera de ETIQUETAS
   prefs.putUInt("boot_id", boot_id);
   Serial.printf("boot_id=%u  n_muestra=%u  condicion=%s\n",
                 boot_id, n_muestra, ETIQUETAS[condicion]);
+  Serial.printf("modelo=%s  ventana=%d muestras x 5 min\n",
+                plantaia_modelo_version(), FEAT_VENTANA);
 
+  // Ventana de features vacía: arranca en warm-up (1 h hasta tener delta).
+  features_reset(&buf_feat);
+
+  // Prueba de lámparas: los tres LEDs medio segundo. Después quedan apagados
+  // hasta la primera predicción, así "apagado" no se confunde con placa muerta.
+  digitalWrite(PIN_LED_VERDE, HIGH); digitalWrite(PIN_LED_AMARILLO, HIGH); digitalWrite(PIN_LED_ROJO, HIGH);
+  delay(500);
   actualizar_semaforo();
 
   lcd.clear();
@@ -386,19 +507,22 @@ void loop() {
   unsigned long ahora = millis();
   manejar_boton();
 
-  if (ahora - t_lectura >= INTERVALO_LECTURA) {
-    t_lectura = ahora;
-    leer_sensores();
-    actualizar_lcd();
-    Serial.printf("[%lu] T:%.1f H:%.0f Luz:%.0f%% Suelo(raw:%d mv:%.0f) Termistor(raw:%d mv:%.0f %.1fC) Cond:%s\n",
-      ahora/1000, s.temp_dht, s.hum_aire, s.luz_pct, s.suelo_raw, s.suelo_mv,
-      s.ntc_raw, s.ntc_mv, s.temp_ntc, ETIQUETAS[condicion]);
-  }
-
-  if (ahora - t_envio >= INTERVALO_ENVIO || forzar_envio) {
+  // Tick de 5 min (y el primero, apenas arranca): leer → buffer → features →
+  // predecir → LED → LCD → log → POST. Va ANTES del refresco del LCD para no
+  // leer el DHT11 dos veces seguidas en la misma vuelta.
+  //
+  // Envío forzado (pulsación larga): lee, predice en modo CONSULTA (la ventana
+  // no avanza) y manda. NO reinicia t_envio: la ventana de 1 h tiene que avanzar
+  // sólo con los ticks de 5 min, si no "12 muestras atrás" dejaría de ser
+  // "60 min atrás" y las features no serían las del entrenamiento.
+  bool tick = primer_tick || (ahora - t_envio >= INTERVALO_ENVIO);
+  if (tick || forzar_envio) {
+    if (tick) { t_envio = ahora; primer_tick = false; }
     forzar_envio = false;
-    t_envio      = ahora;
     leer_sensores();
+    inferir(tick);
+    actualizar_lcd();       // la predicción nueva al LCD ANTES del POST, que puede tardar
+    t_lectura = millis();   // la lectura recién hecha cuenta como refresco
     bool ok = enviar();
 
     char buf[17];
@@ -411,5 +535,18 @@ void loop() {
     delay(2000);   // PENDIENTE: pasar a máquina de estados, bloquea el botón
     lcd.clear();
     actualizar_lcd();
+  }
+
+  // millis() de nuevo y no `ahora`: si hubo tick, t_lectura quedó DESPUÉS de
+  // `ahora` y la resta sin signo daría la vuelta (lectura extra inmediata).
+  unsigned long ahora_lcd = millis();
+  if (ahora_lcd - t_lectura >= INTERVALO_LECTURA) {
+    t_lectura = ahora_lcd;
+    leer_sensores();
+    actualizar_lcd();
+    Serial.printf("[%lu] T:%.1f H:%.0f Luz:%.0f%% Suelo(raw:%d mv:%.0f) Termistor(raw:%d mv:%.0f %.1fC) Cond:%s Pred:%s\n",
+      ahora_lcd/1000, s.temp_dht, s.hum_aire, s.luz_pct, s.suelo_raw, s.suelo_mv,
+      s.ntc_raw, s.ntc_mv, s.temp_ntc, ETIQUETAS[condicion],
+      plantaia_etiqueta(hay_inf ? inf_ult.clase : 0));
   }
 }

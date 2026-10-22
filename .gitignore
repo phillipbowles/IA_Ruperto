@@ -42,3 +42,9 @@ frontend/dist/
 
 # Claude Code — preferencias personales, no del equipo
 .claude/settings.local.json
+
+# Datos simulados (Tarea 2): se generan localmente y no se versionan
+data/sintetico/
+data/sintetico_v2/
+ml/plantaia_ml/simulador.py
+ml/plantaia_ml/relleno.py

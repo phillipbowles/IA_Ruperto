@@ -35,7 +35,7 @@ editar una línea en vez de 300 filas.
 | `dispositivo` | `maceta-01` |
 | `ts_inicio` / `ts_fin` | ISO-8601 **en UTC** (`2026-09-16T15:47:29Z`). Intervalo semiabierto: `ts_fin` no entra |
 | `clase` | `saludable` \| `estresada` \| `marchita` |
-| `origen` | `manual` \| `propagada` \| `corregida` — ver abajo |
+| `origen` | `manual` \| `propagada` \| `corregida` — ver abajo. (`simulada` existe sólo en el `episodios_relleno.csv` local de los datos simulados, ver más abajo) |
 | `autor`, `nota` | Quién y por qué. La nota importa más de lo que parece |
 
 Dos episodios del mismo dispositivo **no pueden pisarse en el tiempo**. No hay
@@ -84,3 +84,102 @@ del 11/09 al 3/10).
   Todas las filas de la base llegan cada 30 s.
 - Una fila (id 1) trae la hora de la placa en 2025 (reloj sin sincronizar). El
   dashboard la ubica con `ts_servidor`.
+
+## Tanda del 18 al 21/10
+
+Snapshot `mediciones_raw_2026-10-21.csv`: 14.791 filas de `maceta-01` (del 12/09
+al 21/10). Las 6.523 primeras son idénticas al snapshot del 08/10.
+
+- **8.268 filas nuevas**, del 18/10 23:31 al 21/10 21:21 UTC, todas en un solo
+  arranque (`boot_id` 49). Entre el 03/10 20:35 y el 18/10 23:31 no hay **ninguna**
+  fila: 15 días con la placa desenchufada. Los `id` saltan de 6523 a 12213 porque
+  la base tuvo filas de otro dispositivo que se borraron; `numero_muestra` sigue
+  correlativo (6522 → 6523).
+- **La cadencia sigue en 30 s y el firmware en 1.1.0** (99,6 % de los intervalos).
+  Hay algunos cortes de 2,5 a 9 min (WiFi), ninguno más largo.
+- **Episodios 11 a 15** (ver las notas en `episodios.csv`):
+
+  | id | clase | origen | desde → hasta (UTC) | filas a 5 min* |
+  |---|---|---|---|---|
+  | 11 | saludable | propagada | 18/10 23:31 → 19/10 02:51 | 33 |
+  | 12 | marchita | manual (6920 + 6922) | 19/10 02:51 → 10:18 | 90 |
+  | 13 | estresada | manual (7795) | 19/10 10:18 → 22:41 | 146 |
+  | 14 | estresada | propagada | 19/10 22:41 → 20/10 23:50 | 302 |
+  | 15 | saludable | manual (12208) | 20/10 23:50 → 21/10 21:21 | 259 |
+
+  \* después de descartar los primeros 30 min tras el arranque.
+
+  - Las pulsaciones 6920 (`saludable`) y 6922 (`marchita`) están a 60 s: el
+    botón cicla, así que es **una** observación y vale la última. La 6920 queda
+    dentro del 11.
+  - El 11 es `propagada` como el 2 y el 4: la placa arrancó con `saludable` en
+    Preferences desde el 2/10 y nadie miró la planta hasta 3 h después, cuando
+    la observación dijo `marchita`. Se marca como dudoso.
+  - El **riego** del 19/10 a las 22:41 (muestra 9214) se ve solo: el sustrato
+    salta de 1935 a 1512 mV en una muestra, la luz cae a 589 mV por la sombra de
+    quien riega y la HR sube 5 puntos. Ahí se corta el 13 y empieza el 14, que
+    es la etiqueta `estresada` arrastrada ~25 h después del riego sin que nadie
+    la confirme, con el sustrato ya en el rango de los `saludable` de octubre.
+    También se marca como dudoso.
+- **Sustrato**: ~1750 mV en la marchita nocturna del 19/10, sube a ~1950 mV
+  durante el día (se seca), ~1400–1500 mV después del riego. En septiembre la
+  marchita marcaba ~2800 mV: la escala de la sonda se encogió (corrosión), y
+  por eso hay que seguir con la calibración semanal de `docs/CALIBRACION.md`.
+- **Transitorio post-arranque**: 2 filas `suelo_saturado` (3124 mV, sonda
+  todavía fuera del sustrato) y después 2244 → ~1750 mV en ~3 h. Ajustando una
+  exponencial a los 7 arranques largos de la base sale una amplitud de 200–480
+  mV y una constante de 24–83 min (42 min en este). **Los 30 min que descarta
+  `ml/plantaia_ml/datos_reales.py` dejan todavía ~la mitad del transitorio**;
+  descartar 2 h sería más seguro, a costa de perder filas.
+- **Luz**: las 2.976 filas con `luz_saturada` de esta tanda son todas de
+  **oscuridad** (luz_raw = 0 → 142 mV), no del techo del ADC: el aviso se
+  dispara en los dos extremos. De 19 a 22 h local hay una lámpara (~1780 mV
+  constante), así que "luz alta" no siempre es sol.
+- **Aire**: 17,8–21,4 °C y 40–58 % de HR, sin fallas del DHT11.
+- **Termistor**: `temp_ntc_c` se mueve al revés que el DHT11 (25 °C cuando el
+  DHT marca 20, 38 °C cuando marca 8,5). Ver la sección del radiador.
+
+## El radiador del 15 y 16/09 (no son outliers)
+
+Hay 547 filas con `temperatura_c ≥ 26 °C` y **son reales**: la maceta estuvo
+sobre un radiador. No se recortan, no se filtran y no se tratan como error del
+sensor.
+
+| día | tramo (UTC) | T mediana / máx. | HR | sustrato | episodios |
+|---|---|---|---|---|---|
+| 15/09 | 12:35 → 15:34 | 33,8 / 35,6 °C | ~23 % | ~2780 mV (seco) | 2, 3 |
+| 16/09 | 15:42 → 16:51 y 19:25 → 20:30 | 27,1 / 31,3 °C | ~24 % | ~1810–1980 mV (recién regado) | 4, 5, 6 |
+
+El 16/09 la maceta se bajó del radiador entre las 17:00 y las 19:10 (~14 °C) y
+volvió a subir; se cuenta como un mismo período. El VPD en esas filas llega a
+4 kPa, tres veces el de un día normal en interior: es la condición de más
+demanda de agua de todo el dataset.
+
+El termistor, en cambio, marca 9 °C sobre el radiador y 38 °C en la noche fría
+del 13/09. `termistor_mv` sube con la temperatura (+32 mV/°C), lo que indica que
+el NTC está del lado de VCC del divisor y no del de GND como asume la fórmula de
+`main.cpp`: la conversión refleja la temperatura alrededor de ~25 °C. Hasta
+corregirlo, `temp_ntc_c` no sirve como temperatura (ni como respaldo del DHT11).
+
+## Filas con `firmware_version = "relleno"`
+
+La serie de maceta-01 tiene tramos sin registro de la placa (reinicios, cortes
+de luz y las dos semanas del 03/10 al 18/10). Esos tramos se completaron **a
+posteriori con un simulador** calibrado con las mediciones reales, a 30 s como
+el resto de la base. Son **datos simulados (calibrados con lo medido)**, no
+mediciones: cada fila lleva `firmware_version = "relleno"` y
+`etiqueta_origen = "simulada"`, y sus episodios (ids 2000+)
+`origen = "simulada"` con la nota que lo explica. No hay pulsaciones de botón
+simuladas.
+
+- `simulada` es un valor propio de `origen`, distinto de `manual`,
+  `propagada` y `corregida`: `corregida` es sólo el reetiquetado hecho por una
+  persona (como el episodio 1, que sí es medido).
+- Viven sólo en el archivo local `data/sintetico/` (en `.gitignore`) y **no
+  se mandan a Railway**. Si un snapshot de Railway trajera filas con
+  `firmware_version = "relleno"` o `etiqueta_origen = "simulada"`,
+  `serie_maceta01()` levanta un error.
+- `ml/plantaia_ml/dataset.py` las marca con `fuente = "simulada_relleno"`;
+  cualquier resultado "sobre la planta" se reporta filtrando `fuente == "real"`.
+- Cómo se generaron, con qué calibración y qué limitaciones tienen: README
+  local de `data/sintetico/` (no se versiona) y el informe de la Tarea 2.

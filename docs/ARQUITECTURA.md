@@ -347,27 +347,51 @@ de gráficos cuando el dataset crezca.
 
 ## 7. Dónde corre el modelo
 
-**La predicción viaja en la respuesta del mismo POST que ingesta la muestra.**
+**El modelo corre en la ESP32.** La Tarea 2 exige inferencia en la placa, así
+que esta sección reemplaza al diseño anterior, que ponía la inferencia en el
+backend y devolvía la predicción en la respuesta del POST. El plan y el
+contrato están en [docs/ENTREGA2.md](ENTREGA2.md) §1 y §5.4.
 
 ```
-ESP32 ──POST medición──► backend ─► guarda ─► features(últimas 24 h) ─► modelo
-       ◄──{"prediccion":"estresada","proba":0.81}──────────────────────────┘
-       └─► prende el LED
+ESP32 cada 5 min: leer ─► buffer de 1 h ─► features ─► plantaia_predecir() ─► LED
+                                                                   │
+                  └──POST medición + prediccion_* + modelo_version─┴──► backend
+                                                                  (hoy la ignora)
 ```
 
-Las alternativas y por qué no:
+- La predicción **no depende del WiFi**: se hace antes del POST, así que si el
+  envío falla el LED igual se actualiza.
+- Las features se calculan con un buffer chico en RAM: **ventana máxima de
+  1 h** (13 muestras a 5 min). Nada de medias de 6 h / 24 h ni de
+  `horas_desde_riego`, que en la placa no existe. El contrato de features es
+  docs/ENTREGA2.md §4.
+- El mismo cálculo existe en Python (`ml/plantaia_ml/features.py`) y en C++
+  (`firmware/lib/plantaia_ml/`); la paridad la verifica `pio test -e native`.
+  Es la versión en la placa de la regla de §2: train y serve tienen que
+  calcular las features igual.
+- El modelo se exporta a un header C generado
+  (`firmware/lib/plantaia_ml/modelo_plantaia.h`) con
+  `ml/plantaia_ml/exportar_c.py`. **Cada reentrenamiento obliga a reflashear**:
+  es el costo de esta opción.
+- La predicción viaja en el mismo POST: `prediccion_codigo`,
+  `prediccion_etiqueta`, `prediccion_proba` y `modelo_version`. El backend
+  **hoy la ignora** (Pydantic descarta los campos que no conoce). Persistirla en
+  la tabla `predicciones` de §3.4, con su migración de Alembic, queda como
+  mejora futura y no es parte de la Tarea 2.
 
-| Opción | Problema |
-|---|---|
-| Umbrales del árbol como `if` en el firmware | las features son medias móviles de 1 h / 6 h / 24 h: habría que guardar 288 muestras y mantener ventanas en la placa. Y cada reentrenamiento obliga a reflashear. |
-| `GET /prediccion` aparte | un request de más cada 5 minutos, para un dato que el backend ya calculó en el request anterior. |
-| Predecir en el front | el semáforo físico quedaría dependiendo de que alguien tenga la pantalla abierta. |
+Por qué cambió frente al diseño anterior:
 
-Con la respuesta del POST: cero requests extra, cero features en la placa, y el
-modelo se actualiza redesplegando el backend sin tocar el hardware.
+| | Inferencia en el backend (antes) | Inferencia en la ESP32 (ahora) |
+|---|---|---|
+| Sin WiFi | el semáforo se congela | el semáforo sigue funcionando |
+| Features | cualquier ventana (24 h, eventos) | sólo lo que entra en 1 h de buffer |
+| Actualizar el modelo | redesplegar el backend | regenerar el header y reflashear |
+| Requests extra | ninguno | ninguno |
 
-El campo ya está reservado en `MedicionResponse` (`prediccion`, `proba`), en
-`null` hasta que haya modelo entrenado.
+`MedicionResponse` todavía conserva los campos `prediccion` y `proba` del
+diseño anterior, siempre en `null`. El diagrama de §2, la carpeta
+`app/ml/` de §4 y el paso 10 de §10 describen ese diseño anterior y quedan
+como historia.
 
 ---
 

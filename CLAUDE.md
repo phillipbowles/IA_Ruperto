@@ -1,8 +1,9 @@
-# PlantaIa — maceta inteligente (Tarea 1, curso de IA)
+# PlantaIa — maceta inteligente (Tareas 1 y 2, curso de IA)
 
 Una ESP32 muestrea sensores cada 5 min sobre un lirio de paz y los manda a un
 backend propio. Con esos datos se entrena un clasificador de 3 clases
-(turgente / marchitez transitoria / marchitez franca).
+(turgente / marchitez transitoria / marchitez franca). Desde la Tarea 2 ese
+clasificador **corre en la placa** y su salida maneja el semáforo LED.
 
 > **Este archivo es la única fuente de verdad** para pines, etiquetas y esquema
 > de datos. Si algún otro documento contradice esto, el otro documento está mal.
@@ -14,6 +15,8 @@ backend propio. Con esos datos se entrena un clasificador de 3 clases
 firmware/   ESP32 (PlatformIO)      backend/   API FastAPI + Alembic (Docker)
 frontend/   React + Vite (Docker)   notebooks/ EDA y entrenamiento
 docs/       decisiones y calibración
+ml/         paquete plantaia_ml: datos, features, modelos, exportador a C
+firmware/lib/plantaia_ml/   inferencia en la placa (C++ sin Arduino.h)
 ```
 
 Cada servicio corre en su contenedor. Para levantar todo en local:
@@ -44,9 +47,10 @@ con las versiones de librerías fijadas en `firmware/platformio.ini`.
 
 ```bash
 cd firmware
-pio run                      # compilar
+pio run                      # compilar (sólo esp32dev, por default_envs)
 pio run -t upload            # subir
 pio device monitor           # 115200
+pio test -e native           # tests del host: features, modelo, replay
 ```
 
 El puerto se autodetecta; si hay más de una placa, fijarlo en `platformio.ini`.
@@ -102,7 +106,8 @@ Es el punto débil conocido del montaje y condiciona varias decisiones:
 ## Convenciones del firmware
 
 - Muestreo cada 5 min en régimen normal; 1 min en las ventanas de recuperación
-  (miércoles post-riego, 6 h) y en la prueba de fuego.
+  (miércoles post-riego, 6 h) y en la prueba de fuego (pendiente: el firmware
+  2.0.0 todavía no lo implementa, ver docs/ENTREGA2.md §6).
 - Cada lectura analógica es la **mediana de 9 muestras**, con
   `analogReadMilliVolts()` — no `analogRead()` crudo a secas.
 - Guardar **siempre el valor crudo además del convertido** (`*_raw` y `*_mv`
@@ -114,8 +119,11 @@ Es el punto débil conocido del montaje y condiciona varias decisiones:
   hora de la placa no se puede cruzar con el timelapse del celular.
 - `boot_id` nuevo en cada arranque y `condicion` persistida en Preferences, para
   que un corte de luz no borre la etiqueta en silencio.
-- El semáforo refleja el último estado estimado; el botón registra una
-  observación manual.
+- El semáforo es la **salida del modelo que corre en la placa** (verde 27 =
+  `saludable`, amarillo 26 = `estresada`, rojo 25 = `marchita`; los tres
+  apagados = sin predicción). No refleja `condicion` ni lo maneja el botón.
+- El botón sólo registra la observación manual: la pulsación corta cicla
+  `condicion` (va en el POST), la larga fuerza un envío.
 
 ## Etiquetas — el target del clasificador
 
@@ -142,12 +150,39 @@ fuertemente correlacionadas.** Un split aleatorio da ~98 % de accuracy por puro
 leakage. Hay que partir por **episodios de etiqueta** (`GroupKFold`), y el N
 efectivo son los episodios, no las filas.
 
+## Modelo en la placa (Tarea 2)
+
+El plan y el contrato están en [docs/ENTREGA2.md](docs/ENTREGA2.md). Cada 5 min
+la placa lee → arma las features → predice → prende el LED → POST con
+`prediccion_*` y `modelo_version`. La inferencia no depende del WiFi.
+
+- **El contrato de features (nombres, orden, unidades, faltantes, warm-up)
+  vive en docs/ENTREGA2.md §4.** Se implementa dos veces, en
+  `ml/plantaia_ml/features.py` y en `firmware/lib/plantaia_ml/features.{h,cpp}`;
+  si se toca uno, se toca el otro en el mismo commit. La **paridad Python↔C**
+  (features y clase predicha) la exige `pio test -e native`.
+- `firmware/lib/plantaia_ml/modelo_plantaia.h` es **GENERADO**: no se edita a
+  mano. Se regenera (junto con los vectores de paridad de `firmware/test/`) con
+
+  ```bash
+  cd ml && /opt/anaconda3/bin/python -m plantaia_ml.exportar_c
+  ```
+
+- Elección del modelo y métricas: `notebooks/03_modelos.ipynb` y
+  `docs/entrega2/RESULTADOS.md`. Python: `/opt/anaconda3/bin/python`, versiones
+  en `ml/requirements.txt`; tests con `cd ml && /opt/anaconda3/bin/python -m pytest -q tests`.
+- **Los datos simulados son locales**: `data/sintetico/`,
+  `ml/plantaia_ml/simulador.py` y `ml/plantaia_ml/relleno.py` están en
+  `.gitignore`. Nunca van a Railway ni al repo, y las métricas sobre lo medido
+  se reportan filtrando por `fuente == 'real'`.
+
 ## Datos
 
 El almacenamiento es **Postgres en Railway**, alimentado por HTTPS desde la
 placa (`POST /api/v1/mediciones`, idempotente por `dispositivo + numero_muestra`).
 LittleFS en la placa queda como **buffer de reenvío** para cuando se cae el WiFi,
-no como almacenamiento principal.
+no como almacenamiento principal (pendiente: el firmware 2.0.0 todavía no lo
+implementa, ver docs/ENTREGA2.md §6).
 
 El esquema se separa en cuatro tablas porque tienen ciclos de vida distintos
 — hechos inmutables, anotaciones humanas corregibles, y salidas del modelo.
@@ -156,7 +191,9 @@ El detalle está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 El CSV de análisis (`ts_iso, ts_unix, muestra_id, boot_id, luz_raw, luz_mv,
 luz_nivel, temp_ntc_c, temp_dht_c, hum_aire_pct, suelo_raw, suelo_pct, etiqueta,
 etiqueta_origen, evento, escena_luz, peso_g, foto, nota, flags`) **es una vista,
-no una tabla**: sale del join de las cuatro en `GET /api/v1/dataset.csv`.
+no una tabla**: sale del join de las cuatro en `GET /api/v1/dataset.csv`
+(pendiente: hoy ese endpoint da 404; el volcado crudo sale de
+`GET /api/v1/mediciones.csv`, ver docs/ENTREGA2.md §6).
 
 - `evento`: `riego` | `cambio_luz` | `lampara_on` | `lampara_off`
 - `escena_luz`: `velo_abierto` | `velo_cerrado` | `pantalla` | `lampara`
