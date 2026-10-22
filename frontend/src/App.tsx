@@ -11,6 +11,7 @@ import { DonutErrores } from "./componentes/DonutErrores";
 import { DonutEtiquetas } from "./componentes/DonutEtiquetas";
 import { DispersionTemp } from "./componentes/DispersionTemp";
 import { TablaRegistros } from "./componentes/TablaRegistros";
+import { AvatarLirio } from "./componentes/AvatarLirio";
 
 const RANGOS = [
   { id: "24h", texto: "24 h", ms: 24 * 3600e3 },
@@ -87,6 +88,12 @@ export function App() {
           </span>
         </div>
       </header>
+
+      <AvatarLirio
+        estado={u.condicion_etiqueta === "sin_etiquetar" ? null : u.condicion_etiqueta}
+        origen={u.etiqueta_origen}
+        ts={u.ts_servidor}
+      />
 
       <div className="kpis">
         <Kpi etiqueta="Muestras" valor={res.total.toLocaleString("es-AR")}

@@ -90,6 +90,100 @@ body {
 .punto { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--ok); }
 .punto--off { background: var(--malo); }
 
+/* ── avatar del lirio ─────────────────────────────────────────────────── */
+/* Cada estado fija colores y ángulos; el cambio de clase en .lirio dispara las
+   transiciones. La hoja rota en la base y la lámina en la punta del pecíolo:
+   dos giros encadenados la doblan como una hoja real que pierde turgencia. */
+.lirio { display: flex; flex-wrap: wrap; align-items: center; gap: 20px 32px; margin-top: 20px;
+  padding: 16px 24px; background: var(--panel); border: 1px solid var(--borde); border-radius: 16px; }
+.lirio__escena { flex: none; width: 220px; height: 238px; display: grid; place-items: center;
+  background: var(--panel-alt); border-radius: 14px; }
+.lirio__escena svg { width: 196px; height: 212px; overflow: visible; }
+.lirio__texto { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.lirio__et { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--texto-3); }
+.lirio__nombre { display: flex; align-items: center; gap: 10px; font-size: 2.1rem; font-weight: 700;
+  line-height: 1.1; letter-spacing: -0.02em; }
+.lirio__punto { width: 12px; height: 12px; flex: none; border-radius: 50%; background: var(--lirio-estado);
+  transition: background 1.2s; }
+.lirio__detalle { margin: 0; max-width: 46ch; color: var(--texto-2); font-size: 0.95rem; }
+.lirio__pie { font-size: 0.78rem; color: var(--texto-3); }
+
+.lirio--saludable { --hoja: #2f8a55; --hoja-osc: #1f6b40; --tierra: #4a3426; --espata: #fff; --lirio-estado: var(--ok); }
+.lirio--estresada { --hoja: #86a83c; --hoja-osc: #62802a; --tierra: #6e5036; --espata: #f4efd9; --lirio-estado: var(--alerta); }
+.lirio--marchita  { --hoja: #ad9550; --hoja-osc: #7f6b34; --tierra: #9b7a55; --espata: #dccb98; --lirio-estado: var(--malo); }
+.lirio--sin       { --hoja: #7d9483; --hoja-osc: #5d7062; --tierra: #5a4636; --espata: #eef0ee; --lirio-estado: var(--texto-3); }
+
+.lirio .lirio-hoja, .lirio .lirio-lam, .lirio .lirio-tallo, .lirio .lirio-espata, .lirio .lirio-planta {
+  transform-box: view-box; transition: transform 1.2s cubic-bezier(.45, .05, .25, 1); }
+.lirio-lam-forma { fill: var(--hoja); transition: fill 1.2s; }
+.lirio-peciolo { fill: none; stroke: var(--hoja-osc); stroke-width: 3; stroke-linecap: round; transition: stroke 1.2s; }
+.lirio-nervio { fill: none; stroke: rgba(255, 255, 255, .35); stroke-width: 1.6; stroke-linecap: round; }
+.lirio-espata-forma { fill: var(--espata); stroke: rgba(0, 0, 0, .12); stroke-width: 1; transition: fill 1.2s; }
+.lirio-espata-nervio { fill: none; stroke: rgba(0, 0, 0, .08); stroke-width: 1.4; }
+.lirio-espadice { fill: #f1d98a; }
+.lirio-sombra { fill: rgba(0, 0, 0, .08); }
+.lirio-maceta { fill: #d97a4c; }
+.lirio-borde { fill: #c4643d; }
+.lirio-tierra { fill: var(--tierra); transition: fill 1.2s; }
+.lirio-grietas path { fill: none; stroke: #6b5234; stroke-width: 1.4; stroke-linecap: round; }
+.lirio-ojo { fill: #3a2a22; }
+.lirio-brillo-ojo { fill: #fff; }
+.lirio-trazo { fill: none; stroke: #3a2a22; stroke-width: 3; stroke-linecap: round; }
+.lirio-mejilla { fill: #f29c8a; opacity: .55; }
+.lirio-gota { fill: #7cc4ef; }
+.lirio-estrella { fill: #ffd66b; transform-box: fill-box; transform-origin: center; }
+.lirio-hojita { fill: #b99a4c; transform-box: fill-box; transform-origin: center; }
+
+.lirio-cara, .lirio-grietas, .lirio-brillos, .lirio-caida { opacity: 0; transition: opacity .7s; }
+.lirio--saludable .lirio-cara--saludable, .lirio--estresada .lirio-cara--estresada,
+.lirio--marchita .lirio-cara--marchita, .lirio--sin .lirio-cara--sin,
+.lirio--marchita .lirio-grietas, .lirio--saludable .lirio-brillos, .lirio--marchita .lirio-caida { opacity: 1; }
+
+/* Ángulos por estado. «sin» usa la pose sana: no hay dato para inclinarla. */
+.lirio .h1 { transform: rotate(-50deg); } .lirio .h1 .lirio-lam { transform: rotate(-6deg); }
+.lirio .h2 { transform: rotate(-24deg); } .lirio .h2 .lirio-lam { transform: rotate(-4deg); }
+.lirio .h3 { transform: rotate(3deg); }   .lirio .h3 .lirio-lam { transform: rotate(2deg); }
+.lirio .h4 { transform: rotate(26deg); }  .lirio .h4 .lirio-lam { transform: rotate(5deg); }
+.lirio .h5 { transform: rotate(52deg); }  .lirio .h5 .lirio-lam { transform: rotate(8deg); }
+.lirio .lirio-tallo { transform: rotate(-3deg); }
+.lirio--estresada .h1 { transform: rotate(-58deg); } .lirio--estresada .h1 .lirio-lam { transform: rotate(-36deg); }
+.lirio--estresada .h2 { transform: rotate(-30deg); } .lirio--estresada .h2 .lirio-lam { transform: rotate(-30deg); }
+.lirio--estresada .h3 { transform: rotate(7deg); }   .lirio--estresada .h3 .lirio-lam { transform: rotate(26deg); }
+.lirio--estresada .h4 { transform: rotate(32deg); }  .lirio--estresada .h4 .lirio-lam { transform: rotate(32deg); }
+.lirio--estresada .h5 { transform: rotate(60deg); }  .lirio--estresada .h5 .lirio-lam { transform: rotate(36deg); }
+.lirio--estresada .lirio-tallo { transform: rotate(10deg); }
+.lirio--estresada .lirio-espata { transform: rotate(30deg); }
+.lirio--marchita .h1 { transform: rotate(-74deg); } .lirio--marchita .h1 .lirio-lam { transform: rotate(-98deg); }
+.lirio--marchita .h2 { transform: rotate(-42deg); } .lirio--marchita .h2 .lirio-lam { transform: rotate(-102deg); }
+.lirio--marchita .h3 { transform: rotate(14deg); }  .lirio--marchita .h3 .lirio-lam { transform: rotate(100deg); }
+.lirio--marchita .h4 { transform: rotate(44deg); }  .lirio--marchita .h4 .lirio-lam { transform: rotate(100deg); }
+.lirio--marchita .h5 { transform: rotate(74deg); }  .lirio--marchita .h5 .lirio-lam { transform: rotate(96deg); }
+.lirio--marchita .lirio-tallo { transform: rotate(24deg); }
+.lirio--marchita .lirio-espata { transform: rotate(135deg); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .lirio--saludable .lirio-planta { animation: lirio-mecer 5s ease-in-out infinite; }
+  .lirio--estresada .lirio-planta { animation: lirio-temblar 2.4s ease-in-out infinite; }
+  .lirio-estrella { animation: lirio-titilar 2.4s ease-in-out infinite; }
+  .lirio-estrella.e2 { animation-delay: .8s; }
+  .lirio-estrella.e3 { animation-delay: 1.6s; }
+  .lirio-gota { animation: lirio-gota 2.2s ease-in infinite; }
+  .lirio-hojita { animation: lirio-hoja 4.5s ease-in infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lirio * { transition-duration: .01s !important; }
+}
+@keyframes lirio-mecer { 0%, 100% { transform: rotate(-1.4deg); } 50% { transform: rotate(1.4deg); } }
+@keyframes lirio-temblar { 0%, 100% { transform: rotate(-.5deg); } 50% { transform: rotate(.6deg); } }
+@keyframes lirio-titilar { 0%, 100% { transform: scale(.4); opacity: .2; } 50% { transform: scale(1.1); opacity: 1; } }
+@keyframes lirio-gota { 0% { transform: translateY(0); opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(16px); opacity: 0; } }
+@keyframes lirio-hoja { 0% { transform: translate(0, 0) rotate(0deg); opacity: 0; } 15% { opacity: 1; }
+  100% { transform: translate(18px, 92px) rotate(160deg); opacity: 0; } }
+@media (max-width: 520px) {
+  .lirio { padding: 16px; }
+  .lirio__escena { width: 100%; }
+}
+
 /* ── KPIs ─────────────────────────────────────────────────────────────── */
 .kpis { display: grid; gap: 10px; margin-top: 20px;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
