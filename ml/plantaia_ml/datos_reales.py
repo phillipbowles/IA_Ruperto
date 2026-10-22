@@ -1,7 +1,6 @@
 """Carga y limpieza de los snapshots crudos de Railway (docs/ENTREGA2.md §3.1).
 
-Cualquier CSV con el esquema crudo de Railway pasa por el mismo camino; la
-columna `fuente` dice de dónde salió cada fila (`real` = lo medido por la placa).
+Cualquier CSV con el esquema crudo de Railway pasa por el mismo camino.
 
 Pasos, en este orden y por qué:
 
@@ -119,13 +118,6 @@ def _moda(s: pd.Series):
     return s[s.isin(mejores)].iloc[-1]
 
 
-def _fuente_bin(s: pd.Series):
-    # Un bin es "real" sólo si todas sus filas lo son: un bin mezclado ya no es
-    # una medición pura y no debe contar para el test sobre lo medido.
-    otras = s[s != "real"].dropna()
-    return otras.iloc[0] if len(otras) else "real"
-
-
 def remuestrear_5min(df: pd.DataFrame) -> pd.DataFrame:
     """Mediana por bin de reloj de 5 min, por `(dispositivo, boot_id)`.
 
@@ -147,12 +139,12 @@ def remuestrear_5min(df: pd.DataFrame) -> pd.DataFrame:
     # Las columnas de texto se resuelven con funciones de Python, que son lentas
     # por grupo: sólo se aplican a los bins con más de una fila (el dato real a
     # 30 s). Lo que ya viene a 5 min pasa directo.
-    texto = [c for c in ("errores", "episodio_id", "clase", "etiqueta_origen", "fuente")
+    texto = [c for c in ("errores", "episodio_id", "clase", "etiqueta_origen")
              if c in d.columns]
     n = g["ts"].transform("size")
     unicas = d[n == 1].set_index(claves)[texto]
     multi = d[n > 1].groupby(claves, sort=True)
-    agg = {"errores": _union_errores, "fuente": _fuente_bin}
+    agg = {"errores": _union_errores}
     agregadas = pd.DataFrame({c: multi[c].agg(agg.get(c, _moda)) for c in texto})
     out = out.join(pd.concat([unicas, agregadas]).astype(object))
     out = out.reset_index().rename(columns={"bin": "ts"})
@@ -165,7 +157,7 @@ def remuestrear_5min(df: pd.DataFrame) -> pd.DataFrame:
     return out.drop(columns="ts_arranque")
 
 
-def preparar(raw: pd.DataFrame, episodios: pd.DataFrame | None, fuente: str = "real",
+def preparar(raw: pd.DataFrame, episodios: pd.DataFrame | None,
              dudosos: dict | None = None, post_boot_min: float = POST_BOOT_MIN) -> pd.DataFrame:
     """Cruza, remuestrea y marca. **No descarta nada**: los filtros van aparte.
 
@@ -178,13 +170,11 @@ def preparar(raw: pd.DataFrame, episodios: pd.DataFrame | None, fuente: str = "r
         d["ts"] = elegir_hora(d)
     if episodios is not None:
         d = asignar_episodios(d, episodios)
-    if "fuente" not in d.columns:
-        d["fuente"] = fuente
     b = remuestrear_5min(d)
     b = b.rename(columns={"temperatura_c": "temp_c", "humedad_ambiente_pct": "hum_aire_pct"})
     # El primer bin puede empezar antes del arranque (min_desde_boot < 0): también cae.
     b["post_boot"] = b.min_desde_boot < post_boot_min
-    dudosos = EPISODIOS_DUDOSOS if dudosos is None and fuente == "real" else (dudosos or {})
+    dudosos = EPISODIOS_DUDOSOS if dudosos is None else dudosos
     b["dudoso"] = b.episodio_id.isin(list(dudosos)).fillna(False).astype(bool)
     b = b.sort_values(["dispositivo", "ts"]).reset_index(drop=True)
     return b
@@ -198,7 +188,7 @@ def filtrar(b: pd.DataFrame) -> pd.DataFrame:
 
 COLUMNAS_SALIDA = ["ts", "dispositivo", "boot_id", "episodio_id", "clase", "etiqueta_origen",
                    "suelo_mv", "luz_mv", "temp_c", "hum_aire_pct", "temp_ntc_c", "errores",
-                   "fuente", "dudoso", "n_filas", "min_desde_boot"]
+                   "dudoso", "n_filas", "min_desde_boot"]
 
 
 def cargar_reales(snapshot: Path | str = SNAPSHOT_VIGENTE,
@@ -210,11 +200,8 @@ def cargar_reales(snapshot: Path | str = SNAPSHOT_VIGENTE,
     episodio, con sus marcas (`post_boot`, `suelo_saturado`).
     """
     raw = leer_crudo(snapshot)
-    # Sólo lo medido. Los datos simulados (firmware_version="relleno") viven sólo
-    # en el archivo local y entran por dataset.serie_maceta01(); el snapshot de
-    # Railway no debería traerlos nunca: el filtro es sólo una defensa.
-    raw = raw[(raw.dispositivo == "maceta-01") & (raw.firmware_version != "relleno")]
-    b = preparar(raw, leer_episodios(episodios), fuente="real", post_boot_min=post_boot_min)
+    raw = raw[raw.dispositivo == "maceta-01"]
+    b = preparar(raw, leer_episodios(episodios), post_boot_min=post_boot_min)
     if filtrado:
         b = filtrar(b)
         return b[COLUMNAS_SALIDA]

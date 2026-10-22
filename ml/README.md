@@ -15,11 +15,9 @@ Python: `/opt/anaconda3/bin/python`, con las versiones fijadas en
 | `__init__.py` | Rutas del repo (`RAIZ`, `DATOS`, `FIGURAS`), clases y códigos del firmware, `SNAPSHOT_VIGENTE` |
 | `datos_reales.py` | Carga y limpieza de los snapshots crudos de Railway (§3.1): hora (`ts_dispositivo` o `ts_servidor`), episodio por fila desde `episodios.csv`, remuestreo a 5 min por `boot_id`, marcas `post_boot` / `suelo_saturado` / `dudoso` |
 | `features.py` | Las 7 features del contrato §4 con la misma semántica que el buffer circular de la placa (tramos, faltantes, warm-up). Gemelo de `features.{h,cpp}` |
-| `dataset.py` | `serie_maceta01()`: la tabla de modelado a 5 min (features + clase + `episodio_id` + `fuente`). Suma los datos simulados locales de `data/sintetico/` (o de `$PLANTAIA_SINTETICO`) si existen |
-| `modelos.py` | Candidatos, partición por episodio (`StratifiedGroupKFold`) con búsqueda anidada, estimación de costo en la ESP32 y `CONFIG_FINAL`, el modelo que va a la placa (Random Forest de 30 árboles, `max_depth=5`, `min_samples_leaf=20`, sólo `suelo_mv`) |
+| `dataset.py` | `serie_maceta01()`: la tabla de modelado a 5 min (features + clase + `episodio_id`), armada sólo con lo que midió la placa |
+| `modelos.py` | Candidatos, partición por episodio (`StratifiedGroupKFold`) con búsqueda anidada, estimación de costo en la ESP32 y `CONFIG_FINAL`, el modelo que va a la placa |
 | `exportar_c.py` | Reentrena `CONFIG_FINAL` y escribe el header C y los vectores de paridad (ver abajo) |
-| `simulador.py` | **Local, no versionado.** Motor de simulación de `maceta-01` (ambiente, sustrato, planta, sensores) |
-| `relleno.py` | **Local, no versionado.** Completa los huecos de la serie real con el simulador, empalmando con los bordes (§3.2) |
 
 ## Tests
 
@@ -49,59 +47,34 @@ Después: `cd firmware && pio test -e native` tiene que dar verde. La elección
 del modelo y sus métricas están en `notebooks/03_modelos.ipynb` y
 `docs/entrega2/RESULTADOS.md`.
 
-El modelo exportado hoy es **`rf-f04-7734f6`**. `CONFIG_FINAL`: Random Forest
-de 30 árboles, `max_depth=5`, `min_samples_leaf=20`, con `suelo_mv` y
-`vpd_kpa`. Sale de tres reglas de `modelos.py`:
+La versión vigente del modelo exportado está en la cabecera de
+`firmware/lib/plantaia_ml/modelo_plantaia.h` (`PLANTAIA_MODELO_VERSION`), y
+la configuración elegida (`CONFIG_FINAL`) con sus métricas, en
+`docs/entrega2/RESULTADOS.md`. Se entrena y evalúa **sólo con lo que midió la
+placa** (`maceta-01`); el N efectivo son los episodios, no las filas.
 
-- la **restricción de diseño**: todo candidato usa `suelo_mv` y al menos una
-  feature ambiental;
-- la **compuerta de influencia**: la ambiental cambia la clase de ≥ 1 % de las
-  filas reales;
-- la **condición de seguridad** (`configuraciones_seguridad`): recall de
-  marchita real ≥ 0,9 y el ep. 12 bien.
+Cómo se llega a `CONFIG_FINAL` (`modelos.py`, ejecutado en
+`notebooks/03_modelos.ipynb` §5):
 
-Las dos últimas se agregaron después de ver resultados; ver
-`docs/entrega2/RESULTADOS.md`. Reemplaza al Naive Bayes `nb-f02-fa0df4` y al
-RF sólo-suelo `rf-f0-c42286`.
+- **Restricción de diseño**: todo candidato con selección de features usa
+  `suelo_mv` + al menos una ambiental del aire (`AMBIENTALES`: `temp_c`,
+  `hum_aire_pct`, `vpd_kpa`). `suelo_delta_1h` puede sumarse pero no cuenta, y
+  la luz (`luz_mv`, `luz_media_1h`) no entra (`cumple_restriccion`).
+- **Compuerta de influencia**: la ambiental tiene que cambiar la clase de
+  ≥ `MIN_CAMBIO_PCT` (1 %) de las filas si se la lleva a su mediana.
+- **Condición de seguridad**: recall de marchita ≥ `MIN_RECALL_MARCHITA` (0,9)
+  sin dudosos y el ep. 12 con ≥ `MIN_ACIERTO_EP12` (50 %) de sus filas bien,
+  sobre la grilla de `configuraciones_seguridad`. **Hoy no la cumple ninguna
+  configuración**, así que queda la del criterio de §5.3: `CONFIG_FINAL` es
+  un **árbol de decisión de profundidad 2** (`min_samples_leaf=100`, features
+  `suelo_mv` + `suelo_delta_1h` + `temp_c`).
 
 `matriz_X(df)` arma la entrada descartando explícitamente las columnas de
-etiqueta y procedencia (`etiqueta_origen`, `dudoso`, `episodio_id`, `fuente`,
-…). El exportador sabe escribir árbol, RF, regresión logística y Naive Bayes
-gaussiano. La
-versión es `tipo-f<features>-<hash>`, con un hash del C generado: cambia si
-cambian los datos de entrenamiento (por ejemplo, los datos simulados).
+etiqueta y procedencia (`etiqueta_origen`, `dudoso`, `episodio_id`, …). El
+exportador sabe escribir árbol, RF, regresión logística y Naive Bayes
+gaussiano. La versión es `tipo-f<features>-<hash>`, con un hash del C
+generado: cambia si cambian los datos de entrenamiento (por ejemplo, un
+snapshot nuevo de Railway).
 
-El exportador entrena con la serie completa de `serie_maceta01()`, que incluye
-los datos simulados locales si están en `data/sintetico/` (o en
-`$PLANTAIA_SINTETICO`): sin ellos el modelo exportado sale distinto. El modelo
-`rf-f04-7734f6` se entrenó con el relleno simulado **v2**, el recalibrado tras
-[docs/entrega2/AUDITORIA_DATOS.md](../docs/entrega2/AUDITORIA_DATOS.md).
-
-## Datos simulados: sólo locales
-
-`simulador.py`, `relleno.py` y `data/sintetico/` están en `.gitignore`. Todo lo
-que generan lleva `fuente` distinta de `real`, **nunca va a Railway ni al
-repo**, y las métricas sobre lo medido se reportan filtrando por
-`fuente == 'real'`, nunca por dispositivo. Son **datos simulados** calibrados
-con lo medido (curva de la sonda, luz, T/HR, ruido y deriva de `maceta-01`),
-no datos reales. Cada fila lleva `firmware_version="relleno"` y
-`etiqueta_origen="simulada"` (valor propio: `corregida` es sólo el
-reetiquetado humano desde el front); `dataset.py` los lee sólo del archivo
-local y levanta un error si el snapshot de Railway trae alguno. Para regenerar el relleno (con los archivos locales
-presentes):
-
-```bash
-cd ml && /opt/anaconda3/bin/python -m plantaia_ml.relleno
-```
-
-Escribe en `data/sintetico/` (`payloads_relleno.jsonl`,
-`episodios_relleno.csv`, `relleno_resumen.csv`). Para generar una versión
-nueva sin pisar la vigente, usar la variable de entorno `PLANTAIA_SINTETICO`
-(opcional) o `--salida`:
-
-```bash
-cd ml && PLANTAIA_SINTETICO=../data/sintetico_v3 /opt/anaconda3/bin/python -m plantaia_ml.relleno
-```
-
-`dataset.py` lee la misma variable: con `PLANTAIA_SINTETICO` fijada, el
-notebook y el exportador usan esa carpeta en lugar de `data/sintetico/`.
+El exportador entrena con la serie completa de `serie_maceta01()` sobre el
+snapshot vigente (`SNAPSHOT_VIGENTE`).

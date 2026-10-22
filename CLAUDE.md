@@ -171,10 +171,9 @@ la placa lee → arma las features → predice → prende el LED → POST con
 - Elección del modelo y métricas: `notebooks/03_modelos.ipynb` y
   `docs/entrega2/RESULTADOS.md`. Python: `/opt/anaconda3/bin/python`, versiones
   en `ml/requirements.txt`; tests con `cd ml && /opt/anaconda3/bin/python -m pytest -q tests`.
-- **Los datos simulados son locales**: `data/sintetico/`,
-  `ml/plantaia_ml/simulador.py` y `ml/plantaia_ml/relleno.py` están en
-  `.gitignore`. Nunca van a Railway ni al repo, y las métricas sobre lo medido
-  se reportan filtrando por `fuente == 'real'`.
+- **Se entrena y evalúa sólo con lo que midió la placa** (los episodios
+  reales de `maceta-01`, partidos por episodio). Los huecos de la serie no se
+  completan (docs/ENTREGA2.md §3.2), y el N efectivo son los episodios medidos.
 
 ## Datos
 

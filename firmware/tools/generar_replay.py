@@ -12,8 +12,8 @@ Uso (desde la raíz del repo):
     /opt/anaconda3/bin/python firmware/tools/generar_replay.py \\
         --tramo data/mediciones_raw_2026-10-21.csv maceta-01 2026-10-19T14:00Z 150
 
-    # cuando exista el simulado, se agregan más tramos al mismo header:
-    #   --tramo data/sintetico/mediciones_sim.csv.gz sim-01 <desde> 150
+    # se pueden sumar más tramos medidos al mismo header repitiendo --tramo:
+    #   --tramo data/mediciones_raw_2026-10-21.csv maceta-01 <desde> 150
 
 Reglas (las mismas que aplica la placa al armar la MuestraCruda, ver main.cpp):
   - hora = ts_dispositivo si es válida (>= 2026-01-01), si no ts_servidor;
