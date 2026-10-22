@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 from typing import Literal
 
@@ -11,6 +12,7 @@ from .. import vision
 from ..schemas import AnalisisFotoOut
 
 router = APIRouter(prefix="/api/v1/analisis-foto", tags=["analisis"])
+log = logging.getLogger("uvicorn.error")
 
 MODELO = "claude-opus-5-5"
 TIPOS = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -103,11 +105,21 @@ async def analizar_foto(
             extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
             extra_body={"fallbacks": "default"},
         )
-    except anthropic.RateLimitError:
-        raise HTTPException(status_code=429, detail="Demasiados análisis seguidos, probá en un minuto")
+    except anthropic.RateLimitError as e:
+        log.warning("analisis-foto: 429 de Anthropic (%s): %s", e.request_id, e.message)
+        # Un límite momentáneo trae retry-after; sin él suele ser la cuenta sin
+        # crédito o con el tope de gasto en 0.
+        if e.response.headers.get("retry-after"):
+            raise HTTPException(status_code=429, detail="Demasiados análisis seguidos, probá en un minuto")
+        raise HTTPException(
+            status_code=503,
+            detail="La cuenta de la API de Anthropic no tiene cupo: revisá el crédito y los límites en la Consola",
+        )
     except anthropic.APIStatusError as e:
+        log.warning("analisis-foto: %s de Anthropic (%s): %s", e.status_code, e.request_id, e.message)
         raise HTTPException(status_code=502, detail=f"La IA respondió {e.status_code}")
     except anthropic.APIConnectionError:
+        log.warning("analisis-foto: sin conexión con Anthropic")
         raise HTTPException(status_code=502, detail="No se pudo contactar a la IA")
 
     if respuesta.stop_reason == "refusal" or respuesta.parsed_output is None:

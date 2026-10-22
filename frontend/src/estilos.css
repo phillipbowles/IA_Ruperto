@@ -276,16 +276,24 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 16px 24px; background: var(--panel); border: 1px solid var(--borde); border-radius: 16px; }
 .analisis__caja { flex: none; width: 260px; height: 238px; display: grid; place-items: center;
   background: var(--panel-alt); border-radius: 14px; overflow: hidden; }
-.analisis__subida { cursor: pointer; border: 2px dashed var(--borde); transition: border-color 0.2s, background 0.2s; }
+/* La foto es lo que se analiza: ocupa el espacio libre de la tarjeta y se
+   muestra entera (contain), sin recortar justo la planta. */
+.analisis__subida { flex: 1 1 420px; width: auto; height: 420px; cursor: pointer;
+  border: 2px dashed var(--borde); transition: border-color 0.2s, background 0.2s; }
+.analisis__medidor { width: 300px; height: 420px; }
 .analisis__subida:hover, .analisis__subida--sobre { border-color: var(--serie-1); }
 .analisis__subida--sobre { background: color-mix(in srgb, var(--serie-1) 8%, var(--panel-alt)); }
 .analisis__subida:focus-visible { outline: 2px solid var(--serie-1); outline-offset: 2px; }
-.analisis__subida img { width: 100%; height: 100%; object-fit: cover; }
+.analisis__subida { position: relative; }
+/* Absoluta: dentro de la grilla un height: 100% no se resuelve y contain no
+   tendría efecto. */
+.analisis__subida img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .analisis__invitacion { display: flex; flex-direction: column; align-items: center; gap: 10px;
   padding: 16px; text-align: center; color: var(--texto-2); font-size: 0.9rem; }
 .analisis__invitacion svg { width: 34px; height: 34px; fill: none; stroke: var(--texto-3);
   stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .analisis__medidor { padding: 12px; }
+.analisis > .lirio__texto { flex: 1 1 100%; }
 .analisis__error { color: var(--malo); }
 .analisis__detalle { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 4px 0 0;
   max-width: 60ch; font-size: 0.88rem; }
@@ -303,7 +311,9 @@ tbody tr:last-child td { border-bottom: none; }
 
 @media (max-width: 640px) {
   .analisis { padding: 16px; }
-  .analisis__caja { width: 100%; }
+  .analisis__caja, .analisis__medidor { width: 100%; }
+  .analisis__subida { height: 320px; }
+  .analisis__medidor { height: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .medidor-aguja { transition: none; }
