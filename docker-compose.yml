@@ -48,6 +48,8 @@ services:
       PHOTO_STORAGE_DIR: ${PHOTO_STORAGE_DIR:-/data/fotos}
       CORS_ORIGENES:  ${CORS_ORIGENES:-http://localhost:5173}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      IA_PROVEEDOR: ${IA_PROVEEDOR:-}
       ENVIRONMENT:    development
     ports:
       - "${BACKEND_PORT:-8000}:8000"

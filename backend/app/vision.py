@@ -11,11 +11,14 @@ caídas las hojas y las flores de un lirio de paz en una foto.
    horizontal visto desde la base: ~70–90° en una hoja erguida, ~20–30° en una
    que se abre hacia los costados, y negativo en una que cuelga por debajo del
    borde de la maceta. El puntaje de las hojas sale del ángulo medio; el de las
-   flores, del ángulo de las espatas.
+   flores, del ángulo de las espatas, y pesa 40 %: en el lirio de paz la espata
+   caída es la primera señal visible de falta de agua.
 
-Los cortes (CORTES) son heurísticos y NO están calibrados con fotos reales de
-maceta-01: sirven para comparar fotos tomadas desde el mismo ángulo, de frente
-y con la planta entera en cuadro.
+Los cortes (CORTES) son heurísticos. El único ajuste con una foto real fue uno
+(22/10): un lirio con las hojas a ~48° y las espatas caídas, que a ojo está mal
+pero no en el peor estado, tiene que caer en la franja roja clara (~30). Sirven
+para comparar fotos tomadas desde el mismo ángulo, de frente y con la planta
+entera en cuadro.
 """
 
 from dataclasses import dataclass
@@ -28,11 +31,12 @@ LADO_MAX = 512
 
 # Ángulo medio (grados) que da 0 y que da 1, interpolado lineal.
 CORTES = {
-    "angulo_hojas": (5.0, 60.0),
+    "angulo_hojas": (20.0, 75.0),
     "angulo_flores": (20.0, 70.0),
 }
 MIN_FRACCION_VERDE = 0.015
 MIN_FRACCION_FLOR = 0.001
+PESO_FLORES = 0.4
 FRANJA_CENTRAL = 0.06     # ± fracción del ancho del follaje alrededor de la mediana
 
 
@@ -106,7 +110,7 @@ def analizar(datos: bytes) -> ResultadoVision:
         angulo_flores = float(_angulos(fy, fx, base_y, base_x).mean())
         s_flor = _escala(angulo_flores, "angulo_flores")
         metricas["angulo_flores"] = round(angulo_flores, 1)
-        puntaje = 100 * (0.75 * s_hojas + 0.25 * s_flor)
+        puntaje = 100 * ((1 - PESO_FLORES) * s_hojas + PESO_FLORES * s_flor)
         flores = (f"Las espatas están a {angulo_flores:.0f}° sobre la horizontal desde la base: "
                   + _adjetivo(s_flor, "erguidas.", "inclinadas.", "caídas."))
     else:

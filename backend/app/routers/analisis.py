@@ -1,9 +1,13 @@
 import base64
+import logging
 import os
 from typing import Literal
 
 import anthropic
 from fastapi import APIRouter, HTTPException, Query, Request
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 from PIL import UnidentifiedImageError
 from pydantic import BaseModel
 
@@ -11,8 +15,12 @@ from .. import vision
 from ..schemas import AnalisisFotoOut
 
 router = APIRouter(prefix="/api/v1/analisis-foto", tags=["analisis"])
+log = logging.getLogger("uvicorn.error")
 
-MODELO = "claude-opus-5-5"
+MODELO_CLAUDE = "claude-opus-5-5"
+# Override con GEMINI_MODELO: los modelos de Gemini disponibles en el plan
+# gratuito cambian seguido (gemini-2.5-flash ya no se habilita a cuentas nuevas).
+MODELO_GEMINI = os.getenv("GEMINI_MODELO", "gemini-3-flash-preview")
 TIPOS = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 # Mismas tres clases que el clasificador de la placa (CLAUDE.md). El puntaje
@@ -56,14 +64,28 @@ def _estado(puntaje: int) -> Literal["saludable", "estresada", "marchita"]:
     return "marchita"
 
 
+def _proveedor() -> Literal["gemini", "anthropic"] | None:
+    """IA_PROVEEDOR fuerza uno; si no, Gemini (tiene plan gratuito) y después
+    Claude, según qué clave esté cargada."""
+    elegido = os.getenv("IA_PROVEEDOR", "").lower()
+    if elegido in ("gemini", "anthropic"):
+        return elegido
+    if os.getenv("GEMINI_API_KEY"):
+        return "gemini"
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    return None
+
+
 @router.post("", response_model=AnalisisFotoOut)
 async def analizar_foto(
     request: Request,
     metodo: Literal["ia", "vision"] = Query(
-        default="ia", description="ia = Claude; vision = visión por computadora clásica"
+        default="ia", description="ia = Gemini o Claude; vision = visión por computadora clásica"
     ),
 ):
-    if metodo == "ia" and not os.getenv("ANTHROPIC_API_KEY"):
+    proveedor = _proveedor() if metodo == "ia" else None
+    if metodo == "ia" and proveedor is None:
         raise HTTPException(status_code=503, detail="El análisis con IA no está configurado")
 
     content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
@@ -82,11 +104,55 @@ async def analizar_foto(
     if metodo == "vision":
         return _con_vision(bytes(contenido))
 
-    imagen = base64.standard_b64encode(bytes(contenido)).decode("ascii")
+    if proveedor == "gemini":
+        r, modelo = await _con_gemini(bytes(contenido), content_type)
+    else:
+        r, modelo = await _con_claude(bytes(contenido), content_type)
+
+    puntaje = max(0, min(100, r.puntaje))
+    return AnalisisFotoOut(
+        es_planta=r.es_planta,
+        estado=_estado(puntaje) if r.es_planta else None,
+        puntaje=puntaje if r.es_planta else None,
+        hojas=r.hojas,
+        flores=r.flores,
+        explicacion=r.explicacion,
+        metodo="ia",
+        modelo=modelo,
+    )
+
+
+async def _con_gemini(datos: bytes, content_type: str) -> tuple[_Respuesta, str]:
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    try:
+        respuesta = await client.aio.models.generate_content(
+            model=MODELO_GEMINI,
+            contents=[genai_types.Part.from_bytes(data=datos, mime_type=content_type), PROMPT],
+            config=genai_types.GenerateContentConfig(
+                response_mime_type="application/json", response_schema=_Respuesta
+            ),
+        )
+    except genai_errors.ClientError as e:
+        log.warning("analisis-foto: %s de Gemini: %s", e.code, e.message)
+        if e.code == 429:
+            # Plan gratuito: pocos pedidos por minuto.
+            raise HTTPException(status_code=429, detail="Se alcanzó el límite gratuito de Gemini: probá en un minuto")
+        raise HTTPException(status_code=502, detail=f"Gemini respondió {e.code}")
+    except genai_errors.ServerError as e:
+        log.warning("analisis-foto: %s de Gemini: %s", e.code, e.message)
+        raise HTTPException(status_code=503, detail="Gemini está saturado en este momento: probá de nuevo")
+
+    if not isinstance(respuesta.parsed, _Respuesta):
+        raise HTTPException(status_code=502, detail="La IA no pudo analizar esta imagen")
+    return respuesta.parsed, MODELO_GEMINI
+
+
+async def _con_claude(datos: bytes, content_type: str) -> tuple[_Respuesta, str]:
+    imagen = base64.standard_b64encode(datos).decode("ascii")
     client = anthropic.AsyncAnthropic()
     try:
         respuesta = await client.messages.parse(
-            model=MODELO,
+            model=MODELO_CLAUDE,
             max_tokens=16000,
             output_config={"effort": "medium"},
             output_format=_Respuesta,
@@ -103,28 +169,26 @@ async def analizar_foto(
             extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
             extra_body={"fallbacks": "default"},
         )
-    except anthropic.RateLimitError:
-        raise HTTPException(status_code=429, detail="Demasiados análisis seguidos, probá en un minuto")
+    except anthropic.RateLimitError as e:
+        log.warning("analisis-foto: 429 de Anthropic (%s): %s", e.request_id, e.message)
+        # Un límite momentáneo trae retry-after; sin él suele ser la cuenta sin
+        # crédito o con el tope de gasto en 0.
+        if e.response.headers.get("retry-after"):
+            raise HTTPException(status_code=429, detail="Demasiados análisis seguidos, probá en un minuto")
+        raise HTTPException(
+            status_code=503,
+            detail="La cuenta de la API de Anthropic no tiene cupo: revisá el crédito y los límites en la Consola",
+        )
     except anthropic.APIStatusError as e:
+        log.warning("analisis-foto: %s de Anthropic (%s): %s", e.status_code, e.request_id, e.message)
         raise HTTPException(status_code=502, detail=f"La IA respondió {e.status_code}")
     except anthropic.APIConnectionError:
+        log.warning("analisis-foto: sin conexión con Anthropic")
         raise HTTPException(status_code=502, detail="No se pudo contactar a la IA")
 
     if respuesta.stop_reason == "refusal" or respuesta.parsed_output is None:
         raise HTTPException(status_code=502, detail="La IA no pudo analizar esta imagen")
-
-    r = respuesta.parsed_output
-    puntaje = max(0, min(100, r.puntaje))
-    return AnalisisFotoOut(
-        es_planta=r.es_planta,
-        estado=_estado(puntaje) if r.es_planta else None,
-        puntaje=puntaje if r.es_planta else None,
-        hojas=r.hojas,
-        flores=r.flores,
-        explicacion=r.explicacion,
-        metodo="ia",
-        modelo=respuesta.model,
-    )
+    return respuesta.parsed_output, respuesta.model
 
 
 def _con_vision(datos: bytes) -> AnalisisFotoOut:
