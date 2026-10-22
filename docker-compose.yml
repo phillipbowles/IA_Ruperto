@@ -50,6 +50,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       IA_PROVEEDOR: ${IA_PROVEEDOR:-}
+      CALIBRACION_TOKEN: ${CALIBRACION_TOKEN:-}
       ENVIRONMENT:    development
     ports:
       - "${BACKEND_PORT:-8000}:8000"

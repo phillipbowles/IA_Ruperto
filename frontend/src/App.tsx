@@ -13,6 +13,7 @@ import { DispersionTemp } from "./componentes/DispersionTemp";
 import { TablaRegistros } from "./componentes/TablaRegistros";
 import { AvatarLirio } from "./componentes/AvatarLirio";
 import { AnalisisFoto } from "./componentes/AnalisisFoto";
+import { Calibracion } from "./componentes/Calibracion";
 
 const RANGOS = [
   { id: "24h", texto: "24 h", ms: 24 * 3600e3 },
@@ -23,12 +24,14 @@ const RANGOS = [
 const VISTAS = [
   { id: "panel", texto: "Panel de sensores" },
   { id: "foto", texto: "Analizar foto" },
+  { id: "calibrar", texto: "Calibrar" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
 
 // La vista vive en el hash (#foto) para que se pueda compartir el link y el
 // botón «atrás» del navegador vuelva al panel. nginx ni se entera.
-const vistaDelHash = (): Vista => (location.hash === "#foto" ? "foto" : "panel");
+const vistaDelHash = (): Vista =>
+  VISTAS.find((v) => v.id !== "panel" && location.hash === `#${v.id}`)?.id ?? "panel";
 
 export function App() {
   const [vista, setVista] = useState<Vista>(vistaDelHash);
@@ -49,8 +52,22 @@ export function App() {
           </button>
         ))}
       </nav>
-      {vista === "foto" ? <VistaFoto /> : <Tablero />}
+      {vista === "foto" ? <VistaFoto /> : vista === "calibrar" ? <VistaCalibrar /> : <Tablero />}
     </main>
+  );
+}
+
+function VistaCalibrar() {
+  return (
+    <>
+      <header className="cabecera">
+        <div>
+          <h1>PlantaIa</h1>
+          <p className="sub">Calibración del análisis de fotos · lo que ustedes ven contra lo que dice el modelo</p>
+        </div>
+      </header>
+      <Calibracion />
+    </>
   );
 }
 

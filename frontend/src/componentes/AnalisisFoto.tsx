@@ -34,7 +34,7 @@ const INFO: Record<Clase, { nombre: string; detalle: string }> = {
 // diagnóstico y una foto de celular sin achicar pasa los 5 MB.
 const LADO_MAX = 1568;
 
-async function achicar(archivo: File): Promise<Blob> {
+export async function achicar(archivo: File): Promise<Blob> {
   const bmp = await createImageBitmap(archivo);
   const k = Math.min(1, LADO_MAX / Math.max(bmp.width, bmp.height));
   const lienzo = document.createElement("canvas");

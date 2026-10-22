@@ -121,3 +121,43 @@ class AnalisisFotoOut(BaseModel):
     modelo:      str
     # Sólo visión clásica: las mediciones de forma que dan el puntaje.
     metricas:    Optional[dict[str, float]] = None
+
+
+class CalibracionOut(BaseModel):
+    """Una foto de calibración: la etiqueta humana y lo que dijeron los
+    modelos al guardarla. `imagen_url` pide el token de calibración."""
+    id:              int
+    creada_en:       datetime
+    etiqueta:        Literal["saludable", "estresada", "marchita"]
+    puntaje_humano:  Optional[int]
+    nota:            Optional[str]
+    autor:           Optional[str]
+    vision_version:  Optional[str]
+    vision_puntaje:  Optional[int]
+    vision_metricas: Optional[dict[str, float]]
+    ia_modelo:       Optional[str]
+    ia_puntaje:      Optional[int]
+    imagen_url:      str
+
+
+class EvaluacionFila(BaseModel):
+    id:               int
+    etiqueta:         Literal["saludable", "estresada", "marchita"]
+    puntaje_humano:   Optional[int]
+    puntaje:          Optional[int]      # versión actual de la visión clásica
+    estado:           Optional[Literal["saludable", "estresada", "marchita"]]
+    acierto:          bool
+    metricas:         Optional[dict[str, float]]
+
+
+class EvaluacionOut(BaseModel):
+    """La visión clásica de HOY corrida sobre todas las fotos de calibración."""
+    version:          str
+    n:                int
+    aciertos:         int
+    exactitud:        Optional[float]
+    # Error absoluto medio del puntaje, sólo sobre las fotos con puntaje humano.
+    error_medio:      Optional[float]
+    # matriz[etiqueta humana][estado predicho] = cantidad
+    matriz:           dict[str, dict[str, int]]
+    filas:            List[EvaluacionFila]

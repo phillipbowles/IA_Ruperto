@@ -77,17 +77,8 @@ def _proveedor() -> Literal["gemini", "anthropic"] | None:
     return None
 
 
-@router.post("", response_model=AnalisisFotoOut)
-async def analizar_foto(
-    request: Request,
-    metodo: Literal["ia", "vision"] = Query(
-        default="ia", description="ia = Gemini o Claude; vision = visión por computadora clásica"
-    ),
-):
-    proveedor = _proveedor() if metodo == "ia" else None
-    if metodo == "ia" and proveedor is None:
-        raise HTTPException(status_code=503, detail="El análisis con IA no está configurado")
-
+async def leer_imagen(request: Request) -> tuple[bytes, str]:
+    """Cuerpo crudo de la request como imagen, con tipo y tamaño validados."""
     content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
     if content_type not in TIPOS:
         raise HTTPException(status_code=415, detail="Se requiere una imagen JPEG, PNG, WebP o GIF")
@@ -100,14 +91,32 @@ async def analizar_foto(
             raise HTTPException(status_code=413, detail="La imagen supera el tamano permitido")
     if not contenido:
         raise HTTPException(status_code=400, detail="La imagen esta vacia")
+    return bytes(contenido), content_type
 
+
+@router.post("", response_model=AnalisisFotoOut)
+async def analizar_foto(
+    request: Request,
+    metodo: Literal["ia", "vision"] = Query(
+        default="ia", description="ia = Gemini o Claude; vision = visión por computadora clásica"
+    ),
+):
+    if metodo == "ia" and _proveedor() is None:
+        raise HTTPException(status_code=503, detail="El análisis con IA no está configurado")
+    datos, content_type = await leer_imagen(request)
     if metodo == "vision":
-        return _con_vision(bytes(contenido))
+        return analizar_con_vision(datos)
+    return await analizar_con_ia(datos, content_type)
 
+
+async def analizar_con_ia(datos: bytes, content_type: str) -> AnalisisFotoOut:
+    proveedor = _proveedor()
+    if proveedor is None:
+        raise HTTPException(status_code=503, detail="El análisis con IA no está configurado")
     if proveedor == "gemini":
-        r, modelo = await _con_gemini(bytes(contenido), content_type)
+        r, modelo = await _con_gemini(datos, content_type)
     else:
-        r, modelo = await _con_claude(bytes(contenido), content_type)
+        r, modelo = await _con_claude(datos, content_type)
 
     puntaje = max(0, min(100, r.puntaje))
     return AnalisisFotoOut(
@@ -191,7 +200,7 @@ async def _con_claude(datos: bytes, content_type: str) -> tuple[_Respuesta, str]
     return respuesta.parsed_output, respuesta.model
 
 
-def _con_vision(datos: bytes) -> AnalisisFotoOut:
+def analizar_con_vision(datos: bytes) -> AnalisisFotoOut:
     try:
         v = vision.analizar(datos)
     except (UnidentifiedImageError, OSError):
@@ -204,6 +213,6 @@ def _con_vision(datos: bytes) -> AnalisisFotoOut:
         flores=v.flores,
         explicacion=v.explicacion,
         metodo="vision",
-        modelo="vision-clasica-v1",
+        modelo=vision.VERSION,
         metricas=v.metricas,
     )
