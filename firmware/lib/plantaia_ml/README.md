@@ -116,35 +116,46 @@ usan igual la placa y el replay):
 ## 4. Costo en memoria y CPU
 
 Medido con `pio run -e esp32dev` (2026-10-21) con el modelo final
-`rf-f0-c42286` (Random Forest de 30 árboles, `max_depth=5`,
-`min_samples_leaf=20`, sólo `suelo_mv`):
+`rf-f04-7734f6`: Random Forest de 30 árboles, `max_depth=5`,
+`min_samples_leaf=20`, con `suelo_mv` y `vpd_kpa`. Ver la restricción de
+diseño y la condición de seguridad en `docs/entrega2/RESULTADOS.md`.
 
-| | antes (fw 1.1.0) | después (fw 2.0.0 + `rf-f0-c42286`) | diferencia |
+| | antes (fw 1.1.0) | después (fw 2.0.0 + `rf-f04-7734f6`) | diferencia |
 |---|---|---|---|
 | RAM estática | 47 548 B | 47 740 B (14,6 %) | **+192 B** |
-| Flash | 957 897 B | 986 961 B (75,3 %) | **+29 064 B** |
+| Flash | 957 897 B | 986 097 B (75,2 %) | **+28 200 B** |
 
-- RAM estática: `BufferFeatures` 124 B + `Inferencia` 56 B (+ alineación).
+Con los modelos anteriores, la flash era 986 961 B con el RF sólo-suelo
+`rf-f0-c42286` y 963 625 B con el Naive Bayes `nb-f02-fa0df4`.
+
+- **RAM estática.** `BufferFeatures` 124 B + `Inferencia` 56 B (+ alineación).
   Sin memoria dinámica. El modelo no suma RAM estática: sus tablas son
   `static const` y quedan en flash.
-- Stack en el tick: la copia del buffer en `features_consultar()` (124 B,
-  sólo en el envío forzado) + la línea de log (200 B) + ~28 B de RAM del modelo
-  durante la predicción (estimación de `docs/entrega2/RESULTADOS.md`).
-- Flash del modelo: **~24 600 B** de tablas (1628 nodos: feature `int8`,
-  umbral `float`, hijos `int16`; 829 hojas × 3 probabilidades `float`), dentro
-  del presupuesto de 32 KB. El resto de la diferencia es el código de la
-  librería (`features.cpp`, `inferencia.cpp`), `expf` y el formateo de floats
-  que trae libc.
-- CPU por tick: 13 sumas para la media de luz, un `expf` para el VPD y el
-  modelo: 30 recorridos de ≤ 5 comparaciones más el promedio de 30 hojas,
-  **~390 operaciones** por predicción (estimación de
-  `docs/entrega2/RESULTADOS.md`: ~16 µs estimados en la ESP32). El
-  presupuesto del contrato es **< 1 ms por inferencia** y **< 32 KB de flash**
-  para el modelo (§5.3).
-- Tiempo medido **en el host, no en la placa** (`docs/entrega2/logs/replay_host.txt`,
-  150 inferencias): `t_us` de 1–3 µs, mediana 1 µs; máximo 40 µs en la primera
-  llamada, en frío. El número real de la ESP32 sale del log de la placa
-  (`t_us` en cada `[INF]`), pendiente de flashear.
+- **Stack en el tick.**
+  - La copia del buffer en `features_consultar()`: 124 B, sólo en el envío
+    forzado.
+  - La línea de log: 200 B.
+  - ~28 B de RAM del modelo durante la predicción (estimación de
+    `docs/entrega2/RESULTADOS.md`).
+- **Flash del modelo: 23 790 B de tablas** en el header exportado (23 730 B según la estimación de `costo_esp32`, que no cuenta las 30 raíces), dentro del presupuesto de 32 KB.
+  - 1570 nodos: feature `int8`, umbral `float`, hijos `int16`.
+  - 800 hojas × 3 probabilidades `float`.
+  - El resto de la diferencia es el código de la librería (`features.cpp`,
+    `inferencia.cpp`), `expf` y el formateo de floats que trae libc.
+- **CPU por tick.**
+  - 13 sumas para la media de luz y un `expf` para el VPD.
+  - El modelo: 30 recorridos de ≤ 5 comparaciones más el promedio de 30
+    hojas, **~390 operaciones** por predicción (~16 µs estimados en la ESP32,
+    según `docs/entrega2/RESULTADOS.md`).
+  - El presupuesto del contrato (§5.3) es **< 1 ms por inferencia** y
+    **< 32 KB de flash** para el modelo.
+- **Tiempo medido en el host, no en la placa**
+  (`docs/entrega2/logs/replay_host.txt`, 150 inferencias):
+  - `t_us` de 0–2 µs, mediana 1 µs;
+  - 26 µs en la primera llamada, en frío.
+
+  El número real de la ESP32 sale del log de la placa (`t_us` en cada
+  `[INF]`), pendiente de flashear.
 
 Si se cambia el modelo, actualizar esta tabla con la salida de `pio run`.
 

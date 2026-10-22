@@ -92,9 +92,25 @@ costo). Los resultados y el modelo elegido están en el propio notebook y en
 - **Costo en la ESP32**: flash, RAM, operaciones por predicción y si se puede
   exportar sin librerías. La selección sigue el criterio de §5.3 (flash
   < 32 KB, sin memoria dinámica, < 1 ms por inferencia).
-- **Modelo elegido**: `rf-f0-c42286`, Random Forest de 30 árboles,
-  `max_depth=5`, `min_samples_leaf=20`, sólo `suelo_mv`. No supera con
-  claridad al baseline de dos umbrales (ver `docs/entrega2/RESULTADOS.md`).
+- **Restricción de diseño**: el semáforo no puede depender sólo de la sonda.
+  Todo candidato con selección de features usa `suelo_mv` y al menos una
+  ambiental. La §5.7 compara contra el modelo sólo-suelo anterior
+  (`rf-f0-c42286`) y verifica con filas medidas que la ambiental cambia
+  predicciones. Los baselines siguen siendo sólo `suelo_mv`.
+- **X sin metadatos**: antes de cualquier `fit`, `X` se arma descartando
+  explícitamente la etiqueta y su procedencia, con un `assert` contra el
+  contrato §4.
+- **Condición de seguridad**, agregada después de ver resultados (§5.6):
+  - el modelo no puede perder la marchita real: recall de marchita real
+    ≥ 0,9 y el ep. 12 bien;
+  - se elige sobre 165 configuraciones explícitas: regresión logística,
+    árbol, RF chico y Naive Bayes, con suelo + cada ambiental y pares.
+- **Modelo elegido**: `rf-f04-7734f6`, Random Forest de 30 árboles,
+  `max_depth=5`, `min_samples_leaf=20`, con `suelo_mv` y `vpd_kpa`.
+  - El criterio pre-registrado solo elegía el Naive Bayes `nb-f02-fa0df4`,
+    que perdía la marchita de octubre.
+  - Sobre lo real queda a la par o algo mejor que el sólo-suelo y que los
+    dos umbrales (ver `docs/entrega2/RESULTADOS.md`).
 - **Export**: el modelo elegido se escribe en
   `firmware/lib/plantaia_ml/modelo_plantaia.h` con
   `cd ml && /opt/anaconda3/bin/python -m plantaia_ml.exportar_c`.

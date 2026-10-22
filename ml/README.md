@@ -49,15 +49,32 @@ Después: `cd firmware && pio test -e native` tiene que dar verde. La elección
 del modelo y sus métricas están en `notebooks/03_modelos.ipynb` y
 `docs/entrega2/RESULTADOS.md`.
 
-El modelo exportado hoy es **`rf-f0-c42286`** (`CONFIG_FINAL`: Random Forest
-de 30 árboles, `max_depth=5`, `min_samples_leaf=20`, sólo `suelo_mv`). La
+El modelo exportado hoy es **`rf-f04-7734f6`**. `CONFIG_FINAL`: Random Forest
+de 30 árboles, `max_depth=5`, `min_samples_leaf=20`, con `suelo_mv` y
+`vpd_kpa`. Sale de tres reglas de `modelos.py`:
+
+- la **restricción de diseño**: todo candidato usa `suelo_mv` y al menos una
+  feature ambiental;
+- la **compuerta de influencia**: la ambiental cambia la clase de ≥ 1 % de las
+  filas reales;
+- la **condición de seguridad** (`configuraciones_seguridad`): recall de
+  marchita real ≥ 0,9 y el ep. 12 bien.
+
+Las dos últimas se agregaron después de ver resultados; ver
+`docs/entrega2/RESULTADOS.md`. Reemplaza al Naive Bayes `nb-f02-fa0df4` y al
+RF sólo-suelo `rf-f0-c42286`.
+
+`matriz_X(df)` arma la entrada descartando explícitamente las columnas de
+etiqueta y procedencia (`etiqueta_origen`, `dudoso`, `episodio_id`, `fuente`,
+…). El exportador sabe escribir árbol, RF, regresión logística y Naive Bayes
+gaussiano. La
 versión es `tipo-f<features>-<hash>`, con un hash del C generado: cambia si
 cambian los datos de entrenamiento (por ejemplo, los datos simulados).
 
 El exportador entrena con la serie completa de `serie_maceta01()`, que incluye
 los datos simulados locales si están en `data/sintetico/` (o en
 `$PLANTAIA_SINTETICO`): sin ellos el modelo exportado sale distinto. El modelo
-`rf-f0-c42286` se entrenó con el relleno simulado **v2**, el recalibrado tras
+`rf-f04-7734f6` se entrenó con el relleno simulado **v2**, el recalibrado tras
 [docs/entrega2/AUDITORIA_DATOS.md](../docs/entrega2/AUDITORIA_DATOS.md).
 
 ## Datos simulados: sólo locales

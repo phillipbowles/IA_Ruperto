@@ -16,8 +16,8 @@ maceta-01 y escribe tres archivos:
 
 Sin dependencias nuevas: numpy, pandas y sklearn.
 
-Formas que sabe exportar: `DecisionTreeClassifier`, `RandomForestClassifier` y
-`LogisticRegression` (con `StandardScaler` opcional), siempre dentro del
+Formas que sabe exportar: `DecisionTreeClassifier`, `RandomForestClassifier`,
+`LogisticRegression` (con `StandardScaler` opcional) y `GaussianNB`, siempre dentro del
 `Pipeline` de `modelos.py` (primer paso `sel` = subconjunto de features). La
 placa arma siempre los 7 features; el remapeo de índices queda adentro de
 `plantaia_predecir`.
@@ -31,6 +31,15 @@ mandaría a la izquierda lo que sklearn manda a la derecha. Por eso cada umbral
 se guarda como **el mayor float32 que no supera al umbral float64**: para todo
 x float32, `x <= u64` ⟺ `x <= u32`. Los vectores de paridad incluyen, para cada
 nodo, x en el umbral y en el float32 inmediatamente arriba y abajo.
+
+Naive Bayes gaussiano en double
+-------------------------------
+sklearn calcula la log-verosimilitud conjunta en float64 (θ y σ² son float64 y
+x float32 se promueve). El C hace lo mismo en `double` (software en la ESP32:
+son ~20 operaciones, muy por debajo de 1 ms) para que el argmax coincida aun
+cerca de la frontera; sólo las probabilidades finales pasan a `float`. Para los
+modelos sin umbrales explícitos, los vectores de paridad suman puntos a los dos
+lados de cada cambio de clase a lo largo de cada feature usada.
 """
 from __future__ import annotations
 
@@ -43,11 +52,13 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, f1_score, recall_score
+from sklearn.naive_bayes import GaussianNB
 from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeClassifier
 
 from . import CLASES, RAIZ, SNAPSHOT_VIGENTE
 from .features import FEATURES, N_FEATURES, calcular_features
+from .modelos import matriz_X
 
 RUTA_MODELO = RAIZ / "firmware" / "lib" / "plantaia_ml" / "modelo_plantaia.h"
 RUTA_VECTORES = RAIZ / "firmware" / "test" / "test_modelo" / "vectores.h"
@@ -216,6 +227,49 @@ def _c_logreg(clf, cols, esc):
     return L
 
 
+def d64(v) -> str:
+    """Literal double de C que reproduce exactamente el float64 de `v`."""
+    return repr(float(v))
+
+
+def _c_nb(clf, cols):
+    """GaussianNB: jll_k = log π_k − ½ Σ log(2π σ²_kj) − ½ Σ (x_j − θ_kj)² / σ²_kj, en double."""
+    d = len(cols)
+    const = np.log(clf.class_prior_) - 0.5 * np.sum(np.log(2.0 * np.pi * clf.var_), axis=1)
+    L = [f"#define PLANTAIA_NB_D {d}",
+         f"static const uint8_t PLANTAIA_NB_COL[{d}] = {{{', '.join(map(str, cols))}}};",
+         "// log π_k − ½ Σ_j log(2π σ²_kj), por clase (saludable, estresada, marchita).",
+         f"static const double PLANTAIA_NB_CONST[3] = {{{', '.join(d64(v) for v in const)}}};",
+         f"static const double PLANTAIA_NB_MEDIA[3][{d}] = {{"]
+    L += [f"  {{{', '.join(d64(v) for v in fila)}}}," for fila in clf.theta_]
+    L += ["};", f"static const double PLANTAIA_NB_VAR[3][{d}] = {{"]
+    L += [f"  {{{', '.join(d64(v) for v in fila)}}}," for fila in clf.var_]
+    L += ["};",
+          "",
+          "static inline int plantaia_predecir(const float x[PLANTAIA_N_FEATURES], float *proba) {",
+          "  // Log-verosimilitud conjunta en double, como sklearn; softmax para las probabilidades.",
+          "  double jll[PLANTAIA_N_CLASES];",
+          "  int mejor = 0;",
+          "  for (int k = 0; k < PLANTAIA_N_CLASES; k++) {",
+          "    double s = PLANTAIA_NB_CONST[k];",
+          "    for (int j = 0; j < PLANTAIA_NB_D; j++) {",
+          "      double z = (double)x[PLANTAIA_NB_COL[j]] - PLANTAIA_NB_MEDIA[k][j];",
+          "      s -= 0.5 * z * z / PLANTAIA_NB_VAR[k][j];",
+          "    }",
+          "    jll[k] = s;",
+          "    if (s > jll[mejor]) mejor = k;   // '>' estricto: empate → código menor (numpy.argmax)",
+          "  }",
+          "  if (proba != NULL) {",
+          "    double suma = 0.0, p[PLANTAIA_N_CLASES];",
+          "    for (int k = 0; k < PLANTAIA_N_CLASES; k++) { p[k] = exp(jll[k] - jll[mejor]); suma += p[k]; }",
+          "    for (int k = 0; k < PLANTAIA_N_CLASES; k++) proba[k] = (float)(p[k] / suma);",
+          "  }",
+          "  return mejor + 1;",
+          "}",
+          ""]
+    return L
+
+
 def cuerpo_c(modelo: Pipeline) -> tuple[str, list[str]]:
     cols, esc, clf = _partes(modelo)
     if isinstance(clf, DecisionTreeClassifier):
@@ -226,7 +280,29 @@ def cuerpo_c(modelo: Pipeline) -> tuple[str, list[str]]:
         return "rf", _c_bosque(clf, cols)
     if isinstance(clf, LogisticRegression):
         return "logreg", _c_logreg(clf, cols, esc)
+    if isinstance(clf, GaussianNB):
+        if esc is not None:
+            raise ValueError("el Naive Bayes de modelos.py no lleva escalado")
+        return "nb", _c_nb(clf, cols)
     raise TypeError(f"no sé exportar {type(clf).__name__}")
+
+
+def bytes_parametros_c(modelo: Pipeline) -> int:
+    """Bytes de las tablas `static const` que escribe el header para este modelo (lo que
+    ocupa en flash el modelo exportado, sin el código). `modelos.costo_esp32` es la
+    estimación con todo en `float`; para el Naive Bayes difiere porque el header usa `double`."""
+    cols, esc, clf = _partes(modelo)
+    d = len(cols)
+    if isinstance(clf, GaussianNB):
+        return d * 1 + (3 + 2 * 3 * d) * 8
+    if isinstance(clf, LogisticRegression):
+        return d * 1 + (2 * d + 3 * d + 3) * 4
+    arboles = clf.estimators_ if isinstance(clf, RandomForestClassifier) else [clf]
+    nodos = sum(a.tree_.node_count for a in arboles)
+    hojas = sum(int((a.tree_.children_left == -1).sum()) for a in arboles)
+    idx = 2 if max(nodos, hojas) < 32767 else 4
+    raices = len(arboles) * idx if isinstance(clf, RandomForestClassifier) else 0
+    return nodos * (1 + 4 + 2 * idx) + hojas * 3 * 4 + raices
 
 
 def version_modelo(modelo: Pipeline) -> str:
@@ -296,6 +372,17 @@ def vectores_prueba(modelo: Pipeline, X: np.ndarray, n_base: int = 300, n_por_um
             filas = X[rng.choice(len(X), size=max(1, n_por_umbral // 3), replace=False)].copy()
             filas[:, f] = v
             extra.append(filas)
+    if not extra:   # sin umbrales explícitos (logreg, NB): puntos a los dos lados de cada cambio de clase
+        cols, _, _ = _partes(modelo)
+        for c in cols:
+            lo, hi = np.percentile(X[:, c], [0.5, 99.5])
+            grilla = np.linspace(lo, hi, 4000).astype(np.float32)
+            for fila in X[rng.choice(len(X), size=8, replace=False)]:
+                G = np.tile(fila, (len(grilla), 1))
+                G[:, c] = grilla
+                pr = modelo.predict(G)
+                for i in np.flatnonzero(np.diff(pr))[:20]:
+                    extra.append(G[[i, i + 1]])
     return np.vstack([base] + extra) if extra else base
 
 
@@ -411,43 +498,52 @@ def generar_paridad(s: pd.DataFrame) -> tuple[str, pd.DataFrame]:
 
 # ─── Entrenamiento y métricas del modelo final ────────────────────────────
 def metricas_cv(df: pd.DataFrame) -> dict:
-    """CV anidada del tipo elegido (misma partición y grilla que el notebook).
+    """Métricas por episodio para la cabecera del header (mismas particiones que el notebook).
 
-    Además de media ± desvío por fold sobre la serie completa, devuelve las
-    métricas sobre las filas reales fuera de fold (con y sin episodios
-    dudosos): la serie completa mide sobre todo al simulador.
+    Primero las de la **configuración final fija** (`CONFIG_FINAL`, sin búsqueda: es
+    exactamente el modelo que va a la placa), después las de la **búsqueda anidada del
+    tipo** (como la tabla por tipo del notebook). Para cada una, media ± desvío por fold
+    sobre la serie completa y las métricas sobre las filas reales fuera de fold (con y
+    sin dudosos): la serie completa mide sobre todo al simulador.
     """
-    from .modelos import CONFIG_FINAL, busqueda, candidatos, particion_externa
-    X = df[FEATURES].to_numpy(np.float32)
+    from .modelos import CONFIG_FINAL, busqueda, candidatos, modelo_final, particion_externa
+    X = matriz_X(df)   # sin metadatos de etiqueta (modelos.matriz_X)
     y = df.clase_codigo.to_numpy(int)
     g = df.episodio_id.to_numpy(int)
     est, grilla = candidatos()[CONFIG_FINAL["tipo"]]
-    f1, ba, rm = [], [], []
-    oof = np.zeros(len(y), int)
-    for tr, te in particion_externa().split(X, y, g):
-        p = busqueda(est, grilla, n_jobs=1).fit(X[tr], y[tr], groups=g[tr]).predict(X[te])
-        oof[te] = p
-        f1.append(f1_score(y[te], p, average="macro"))
-        ba.append(balanced_accuracy_score(y[te], p))
-        rm.append(recall_score(y[te], p, labels=[3], average="macro"))
-    out = {"f1_macro": (np.mean(f1), np.std(f1)), "exactitud_balanceada": (np.mean(ba), np.std(ba)),
-           "recall_marchita": (np.mean(rm), np.std(rm))}
-    if "fuente" in df:
-        real = (df.fuente == "real").to_numpy()
-        for nombre, m in [("reales", real), ("reales sin dudosos", real & ~df.dudoso.to_numpy(bool))]:
-            if m.any():
-                n_ep = df.loc[m, "episodio_id"].nunique()
-                out[f"f1_macro {nombre} fuera de fold ({n_ep} ep.)"] = f1_score(
-                    y[m], oof[m], labels=[1, 2, 3], average="macro", zero_division=0)
-                out[f"exactitud_balanceada {nombre} fuera de fold ({n_ep} ep.)"] = \
-                    balanced_accuracy_score(y[m], oof[m])
+    folds = list(particion_externa().split(X, y, g))
+    out = {}
+    for rotulo, ajustar in [
+            ("config. final fija", lambda tr: modelo_final().fit(X[tr], y[tr])),
+            (f"búsqueda anidada del tipo {CONFIG_FINAL['tipo']}",
+             lambda tr: busqueda(est, grilla, n_jobs=1).fit(X[tr], y[tr], groups=g[tr]))]:
+        f1, ba, rm = [], [], []
+        oof = np.zeros(len(y), int)
+        for tr, te in folds:
+            p = ajustar(tr).predict(X[te])
+            oof[te] = p
+            f1.append(f1_score(y[te], p, average="macro"))
+            ba.append(balanced_accuracy_score(y[te], p))
+            rm.append(recall_score(y[te], p, labels=[3], average="macro"))
+        out[f"[{rotulo}] f1_macro"] = (np.mean(f1), np.std(f1))
+        out[f"[{rotulo}] exactitud_balanceada"] = (np.mean(ba), np.std(ba))
+        out[f"[{rotulo}] recall_marchita"] = (np.mean(rm), np.std(rm))
+        if "fuente" in df:
+            real = (df.fuente == "real").to_numpy()
+            for nombre, m in [("reales", real), ("reales sin dudosos", real & ~df.dudoso.to_numpy(bool))]:
+                if m.any():
+                    n_ep = df.loc[m, "episodio_id"].nunique()
+                    out[f"[{rotulo}] f1_macro {nombre} fuera de fold ({n_ep} ep.)"] = f1_score(
+                        y[m], oof[m], labels=[1, 2, 3], average="macro", zero_division=0)
+                    out[f"[{rotulo}] exactitud_balanceada {nombre} fuera de fold ({n_ep} ep.)"] = \
+                        balanced_accuracy_score(y[m], oof[m])
     return out
 
 
 def exportar(modelo: Pipeline, df: pd.DataFrame, metricas: dict | None = None,
              escribir: bool = True) -> dict:
     """Escribe los tres headers. Devuelve un resumen (versión, rutas, tamaños)."""
-    X = df[FEATURES].to_numpy(np.float32)
+    X = matriz_X(df)   # sin metadatos de etiqueta (modelos.matriz_X)
     if metricas is None:
         metricas = metricas_cv(df)
     n_ep = df.episodio_id.nunique()
@@ -472,7 +568,7 @@ def main():
     from .dataset import serie_maceta01
     from .modelos import modelo_final
     df = serie_maceta01()
-    X = df[FEATURES].to_numpy(np.float32)
+    X = matriz_X(df)   # sin metadatos de etiqueta (modelos.matriz_X)
     y = df.clase_codigo.to_numpy(int)
     modelo = modelo_final().fit(X, y)
     r = exportar(modelo, df)

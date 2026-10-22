@@ -20,7 +20,7 @@ Fecha de arranque: 2026-10-21.
 | Visualizar resultados | Figuras en el notebook + PNG exportados | `docs/entrega2/fig/` |
 | Calidad de los datos (real y simulado) | Auditoría de la base y del relleno simulado (v1 → v2) | `docs/entrega2/AUDITORIA_DATOS.md` |
 | Elegir modelo compatible con la ESP32 | Tabla rendimiento × costo | notebook §5 |
-| Exportar el modelo | Header C generado (`rf-f0-c42286`) | `firmware/lib/plantaia_ml/modelo_plantaia.h` |
+| Exportar el modelo | Header C generado (`rf-f04-7734f6`) | `firmware/lib/plantaia_ml/modelo_plantaia.h` |
 | Inferencia en tiempo real en la placa | Firmware 2.0.0 | `firmware/src/main.cpp` + `firmware/lib/plantaia_ml/` |
 | Actuador físico | Semáforo LED = predicción del modelo | GPIO 25/26/27 |
 | Documentar la lógica en el micro | | `firmware/lib/plantaia_ml/README.md` |
@@ -287,11 +287,25 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
 
 ### Estado al 2026-10-21
 
-- **Modelo final: `rf-f0-c42286`** — Random Forest de 30 árboles,
-  `max_depth=5`, `min_samples_leaf=20`, sólo `suelo_mv`
-  (`CONFIG_FINAL` en `ml/plantaia_ml/modelos.py`). Reemplaza al árbol
-  `arbol-p2-…` entrenado con el relleno v1. Métricas, costo y justificación en
+- **Modelo final: `rf-f04-7734f6`.** Random Forest de 30 árboles,
+  `max_depth=5`, `min_samples_leaf=20`, con `suelo_mv` y `vpd_kpa`
+  (`CONFIG_FINAL` en `ml/plantaia_ml/modelos.py`, ~23,7 KB de flash).
+  Métricas, costo y justificación en
   [docs/entrega2/RESULTADOS.md](entrega2/RESULTADOS.md).
+  - **Restricción de diseño (2026-10-21):** el semáforo no puede depender sólo
+    de la sonda. Todo candidato usa `suelo_mv` y al menos una feature
+    ambiental.
+  - **Agregado después de ver resultados**, por decisión de producto (el error
+    caro es no avisar marchita, §5.1):
+    - la ambiental tiene que cambiar ≥ 1 % de las predicciones reales;
+    - el modelo no puede perder la marchita real: recall ≥ 0,9 sin dudosos y
+      el ep. 12 bien.
+  - **Modelos anteriores.** El criterio original solo elegía el Naive Bayes
+    `nb-f02-fa0df4`, que fallaba el ep. 12. Antes de la restricción ganaba el
+    RF sólo-suelo `rf-f0-c42286`.
+- **X sin metadatos de etiqueta:** `modelos.matriz_X` y el notebook descartan
+  explícitamente `etiqueta_origen`, `dudoso`, `episodio_id`, `fuente`, etc.
+  antes de cualquier `fit`.
 - **Datos simulados recalibrados (v2).** Tras la
   [auditoría de datos](entrega2/AUDITORIA_DATOS.md), el relleno simulado se
   regeneró con la curva de la sonda de octubre calibrada con lo medido; el
