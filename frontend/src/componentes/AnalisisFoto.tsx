@@ -3,6 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { enviarImagen } from "../api/cliente";
 import type { AnalisisFoto as Resultado, Clase, MetodoAnalisis } from "../tipos";
 import { Medidor } from "./Medidor";
+import { Calibracion } from "./Calibracion";
+import { achicar } from "../lib/imagen";
 
 /** Pestaña «Analizar foto»: se sube una foto del lirio y vuelve un puntaje de
  *  turgencia (cuánto están caídas las hojas y las flores) que mueve el medidor.
@@ -29,22 +31,6 @@ const INFO: Record<Clase, { nombre: string; detalle: string }> = {
   estresada: { nombre: "Estresada", detalle: "Marchitez transitoria: las hojas empiezan a ceder y la flor se inclina." },
   marchita: { nombre: "Marchita", detalle: "Marchitez franca: hojas caídas sobre la maceta. Necesita riego." },
 };
-
-// Lado mayor con el que se manda la foto: más resolución no mejora el
-// diagnóstico y una foto de celular sin achicar pasa los 5 MB.
-const LADO_MAX = 1568;
-
-export async function achicar(archivo: File): Promise<Blob> {
-  const bmp = await createImageBitmap(archivo);
-  const k = Math.min(1, LADO_MAX / Math.max(bmp.width, bmp.height));
-  const lienzo = document.createElement("canvas");
-  lienzo.width = Math.round(bmp.width * k);
-  lienzo.height = Math.round(bmp.height * k);
-  lienzo.getContext("2d")!.drawImage(bmp, 0, 0, lienzo.width, lienzo.height);
-  bmp.close();
-  return new Promise((ok, mal) =>
-    lienzo.toBlob((b) => (b ? ok(b) : mal(new Error("No se pudo leer la imagen"))), "image/jpeg", 0.85));
-}
 
 export function AnalisisFoto() {
   const entrada = useRef<HTMLInputElement>(null);
@@ -154,6 +140,7 @@ export function AnalisisFoto() {
         {r && <span className="lirio__pie">Analizado por {r.modelo} · no se guarda en la base</span>}
       </div>
     </section>
+    <Calibracion archivo={archivo} />
     </>
   );
 }

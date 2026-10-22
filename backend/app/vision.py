@@ -156,9 +156,9 @@ def analizar(datos: bytes) -> ResultadoVision:
         puntaje = 100 * s_hojas
         flores = "No se detectaron espatas blancas: el puntaje sale sólo de las hojas."
 
-    referencia = "el borde de la maceta" if maceta else "la base de la planta"
+    referencia = "del borde de la maceta" if maceta else "de la base de la planta"
     hojas = (f"Ángulo medio de las hojas: {angulo_hojas:.0f}° sobre la horizontal; "
-             f"{colgando:.0%} del follaje cuelga por debajo de {referencia}. "
+             f"{colgando:.0%} del follaje cuelga por debajo {referencia}. "
              + _adjetivo(s_hojas, "Hojas erguidas.", "Hojas cediendo hacia los costados.",
                          "Hojas caídas sobre la maceta."))
     return ResultadoVision(
