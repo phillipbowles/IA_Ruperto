@@ -125,3 +125,34 @@ class Foto(Base):
     )
 
     __table_args__ = (UniqueConstraint("dispositivo", "numero_foto", name="uq_dispositivo_foto"),)
+
+
+class CalibracionFoto(Base):
+    """Foto de la planta con lo que una persona observó, para medir y mejorar
+    el análisis de fotos (docs/VISION_CLASICA.md §5).
+
+    La etiqueta humana es la verdad de esta tabla; lo que dijeron la visión
+    clásica y la IA al guardarla queda al lado para comparar, junto con la
+    versión que lo calculó. La re-evaluación corre la versión actual sobre las
+    fotos guardadas, sin pisar estos valores.
+    """
+
+    __tablename__ = "calibraciones_foto"
+
+    id = Column(Integer, primary_key=True)
+    creada_en = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    object_key = Column(String(512), nullable=False, unique=True)
+    content_type = Column(String(64), nullable=False)
+    bytes = Column(Integer, nullable=False)
+    sha256 = Column(String(64), nullable=False, index=True)
+
+    etiqueta = Column(String(30), nullable=False)          # saludable | estresada | marchita
+    puntaje_humano = Column(Integer, nullable=True)        # 0-100, opcional
+    nota = Column(String(500), nullable=True)
+    autor = Column(String(64), nullable=True)
+
+    vision_version = Column(String(40), nullable=True)
+    vision_puntaje = Column(Integer, nullable=True)
+    vision_metricas = Column(JSON, nullable=True)
+    ia_modelo = Column(String(64), nullable=True)
+    ia_puntaje = Column(Integer, nullable=True)

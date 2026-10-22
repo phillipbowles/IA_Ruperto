@@ -30,6 +30,10 @@ import numpy as np
 from PIL import Image, ImageOps
 from scipy import ndimage as ndi
 
+# Cambia cada vez que cambia el algoritmo o los cortes: la calibración guarda
+# con qué versión se evaluó cada foto.
+VERSION = "vision-clasica-v2"
+
 LADO_MAX = 512
 
 # Ángulo medio (grados) que da 0 y que da 1, interpolado lineal.
