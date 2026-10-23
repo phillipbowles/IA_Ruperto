@@ -4,6 +4,7 @@ import { enviarImagen } from "../api/cliente";
 import type { AnalisisFoto as Resultado, Clase, MetodoAnalisis } from "../tipos";
 import { Medidor } from "./Medidor";
 import { Calibracion } from "./Calibracion";
+import { Recomendaciones } from "./Recomendaciones";
 import { achicar } from "../lib/imagen";
 
 /** Pestaña «Analizar foto»: se sube una foto del lirio y vuelve un puntaje de
@@ -38,6 +39,8 @@ export function AnalisisFoto() {
   const [arrastrando, setArrastrando] = useState(false);
   const [metodo, setMetodo] = useState<MetodoAnalisis>("ia");
   const [archivo, setArchivo] = useState<File | null>(null);
+  // Se pregunta por foto: una foto vieja no se cruza con los sensores de hoy.
+  const [fotoDeAhora, setFotoDeAhora] = useState(false);
   const analisis = useMutation<Resultado, Error, { archivo: File; metodo: MetodoAnalisis }>({
     mutationFn: async ({ archivo, metodo }) =>
       enviarImagen<Resultado>(`/analisis-foto?metodo=${metodo}`, await achicar(archivo)),
@@ -49,6 +52,7 @@ export function AnalisisFoto() {
     if (!archivo || !archivo.type.startsWith("image/")) return;
     setVista(URL.createObjectURL(archivo));
     setArchivo(archivo);
+    setFotoDeAhora(false);
     analisis.mutate({ archivo, metodo });
   };
 
@@ -140,6 +144,7 @@ export function AnalisisFoto() {
         {r && <span className="lirio__pie">Analizado por {r.modelo} · no se guarda en la base</span>}
       </div>
     </section>
+    {r?.estado && <Recomendaciones estado={r.estado} fotoDeAhora={fotoDeAhora} setFotoDeAhora={setFotoDeAhora} />}
     <Calibracion archivo={archivo} />
     </>
   );
