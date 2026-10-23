@@ -1,0 +1,23 @@
+[   0.0s] ets Jul 29 2019 12:21:46
+[   0.0s] rst:0�ets Jul 29 2019 12:21:46
+[   0.0s] rst:0x1 (POWERON_RESET),boot:0x17 (SPI_FAST_FLASH_BOOT)
+[   0.0s] configsip: 0, SPIWP:0xee
+[   0.0s] clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+[   0.0s] mode:DIO, clock div:2
+[   0.0s] load:0x3fff0030,len:1184
+[   0.0s] load:0x40078000,len:13232
+[   0.0s] load:0x40080400,len:3028
+[   0.0s] entry 0x400805e4
+[   0.9s] === PlantaIa boot — fw 2.0.0 ===
+[   2.1s] boot_id=53  n_muestra=17487  condicion=saludable
+[   2.1s] modelo=arbol-p2-f012-58e644  ventana=13 muestras x 5 min
+[  17.7s] WiFi..............................
+[  17.7s] Sin WiFi
+[  19.4s] [INF] n=1 warmup=1 x=[1738,0,22.6,53,1.29,2089,2089] -> saludable p=[0.45,0.28,0.27] t_us=33
+[  34.5s] WiFi..............................
+[  34.5s] Sin WiFi
+[  36.8s] [36] T:22.6 H:53 Luz:61% Suelo(raw:2014 mv:1738) Termistor(raw:1070 mv:972 24.9C) Cond:saludable Pred:saludable
+[  38.8s] [38] T:22.6 H:52 Luz:63% Suelo(raw:2003 mv:1734) Termistor(raw:1040 mv:979 24.6C) Cond:saludable Pred:saludable
+[  40.8s] [40] T:22.6 H:52 Luz:62% Suelo(raw:2011 mv:1740) Termistor(raw:1043 mv:972 24.9C) Cond:saludable Pred:saludable
+[  42.8s] [42] T:22.6 H:52 Luz:62% Suelo(raw:2002 mv:1742) Termistor(raw:1039 mv:972 24.9C) Cond:saludable Pred:saludable
+[  44.8s] [44] T:22.6 H:52 Luz:63% Suelo(raw:2000 mv:1737) Termistor(raw:1041 mv:973 24.8C) Cond:saludable Pred:saludable
