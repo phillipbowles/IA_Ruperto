@@ -162,7 +162,8 @@ la placa lee → arma las features → predice → prende el LED → POST con
   si se toca uno, se toca el otro en el mismo commit. La **paridad Python↔C**
   (features y clase predicha) la exige `pio test -e native`.
 - `firmware/lib/plantaia_ml/modelo_plantaia.h` es **GENERADO**: no se edita a
-  mano. Se regenera (junto con los vectores de paridad de `firmware/test/`) con
+  mano. Se regenera (junto con los vectores de paridad de `firmware/test/` y
+  `frontend/src/modelo_placa.json`, el árbol que dibuja el dashboard) con
 
   ```bash
   cd ml && /opt/anaconda3/bin/python -m plantaia_ml.exportar_c
@@ -172,8 +173,10 @@ la placa lee → arma las features → predice → prende el LED → POST con
   `docs/entrega2/RESULTADOS.md`. Python: `/opt/anaconda3/bin/python`, versiones
   en `ml/requirements.txt`; tests con `cd ml && /opt/anaconda3/bin/python -m pytest -q tests`.
 - **Se entrena y evalúa sólo con lo que midió la placa** (los episodios
-  reales de `maceta-01`, partidos por episodio). Los huecos de la serie no se
-  completan (docs/ENTREGA2.md §3.2), y el N efectivo son los episodios medidos.
+  reales de `maceta-01`, partidos por episodio). Es **una sola maceta**: las
+  filas del 03/10 al 18/10 quedaron en la base como `maceta-02` por error y
+  `datos_reales.unificar_maceta` las une al leer (data/README.md). Los huecos de la serie no se completan
+  (docs/ENTREGA2.md §3.2), y el N efectivo son los episodios medidos.
 
 ## Datos
 

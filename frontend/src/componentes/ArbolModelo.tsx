@@ -1,65 +1,85 @@
 import { useEffect, useRef } from "react";
-import { CORTE_SUELO_MV, CORTE_TEMP_C, HOJAS, VERSION_ARBOL, recorrido, type Hoja } from "../lib/modeloPlaca";
+import { FEATURE, FLASH_B, NODOS, PROFUNDIDAD, VERSION_ARBOL, esHoja, recorrido, type Nodo as NodoArbol } from "../lib/modeloPlaca";
 import type { Clase } from "../tipos";
 
 /** El árbol de decisión de la placa con el recorrido de la medición actual:
  *  un punto que pulsa baja de nodo en nodo hasta la hoja y vuelve a empezar.
- *  Mismo lenguaje visual que el avatar del lirio (estilos.css, «árbol»). */
+ *  Mismo lenguaje visual que el avatar del lirio (estilos.css, «árbol»).
+ *  La forma sale de `modelo_placa.json` (lib/modeloPlaca.ts): el layout se
+ *  calcula, así que sirve para cualquier árbol que exporte el modelo. */
 
 const NOMBRE: Record<Clase, string> = { saludable: "Saludable", estresada: "Estresada", marchita: "Marchita" };
+const CLASES: Clase[] = ["saludable", "estresada", "marchita"];
 
-// Geometría (viewBox 760 × 400). Nodos: centro y medio alto de la tarjeta.
-const RAIZ = { x: 380, y: 62 };
-const SUELO = { x: 560, y: 176 };
-const NODO_MEDIO_ALTO = 32;
-const POS_HOJA: Record<Hoja, { x: number; y: number }> = {
-  frio: { x: 160, y: 286 },
-  humedo: { x: 450, y: 296 },
-  seco: { x: 670, y: 296 },
-};
-const R_HOJA = 40;
+// Geometría. Las hojas van en fila, separadas DX; cada nodo interno queda
+// centrado sobre sus dos hijos; cada nivel baja DY.
+const DX = 112;
+const DY = 112;
+const MARGEN_X = 70;
+const Y0 = 50;
+const NODO_MEDIO_ALTO = 28;
+const NODO_ANCHO = 200;
+const R_HOJA = 34;
 
-const abajo = (n: { x: number; y: number }) => `${n.x},${n.y + NODO_MEDIO_ALTO}`;
-const arriba = (n: { x: number; y: number }, dy: number) => `${n.x},${n.y - dy}`;
-const curva = (a: { x: number; y: number }, b: { x: number; y: number }, dyB: number) => {
-  const y0 = a.y + NODO_MEDIO_ALTO;
-  const y1 = b.y - dyB;
+interface Pos { x: number; y: number; hoja: boolean }
+
+function layout(nodos: NodoArbol[]) {
+  const pos: Pos[] = [];
+  let hojas = 0;
+  let prof = 0;
+  const ubicar = (i: number, d: number): number => {
+    const n = nodos[i];
+    prof = Math.max(prof, d);
+    if (esHoja(n)) {
+      pos[i] = { x: MARGEN_X + hojas++ * DX, y: Y0 + d * DY + 16, hoja: true };
+    } else {
+      const xs = ubicar(n.si, d + 1);
+      const xn = ubicar(n.no, d + 1);
+      pos[i] = { x: (xs + xn) / 2, y: Y0 + d * DY, hoja: false };
+    }
+    return pos[i].x;
+  };
+  ubicar(0, 0);
+  return { pos, ancho: 2 * MARGEN_X + (hojas - 1) * DX, alto: Y0 + prof * DY + R_HOJA + 70 };
+}
+
+const ARMADO = NODOS ? layout(NODOS) : null;
+
+// Borde superior/inferior de un nodo o de una hoja.
+const tope = (p: Pos) => p.y - (p.hoja ? R_HOJA : NODO_MEDIO_ALTO);
+const base = (p: Pos) => p.y + NODO_MEDIO_ALTO;
+const curva = (a: Pos, b: Pos) => {
+  const y0 = base(a);
+  const y1 = tope(b);
   const m = (y0 + y1) / 2;
-  return `M${abajo(a)} C${a.x},${m} ${b.x},${m} ${arriba(b, dyB)}`;
+  return `M${a.x},${y0} C${a.x},${m} ${b.x},${m} ${b.x},${y1}`;
 };
+const dentro = (a: Pos) => `M${a.x},${a.y - NODO_MEDIO_ALTO} L${a.x},${base(a)}`;
 
-// Las cuatro ramas del árbol.
-const RAMAS = {
-  raizFrio: curva(RAIZ, POS_HOJA.frio, R_HOJA),
-  raizSuelo: curva(RAIZ, SUELO, NODO_MEDIO_ALTO),
-  sueloHumedo: curva(SUELO, POS_HOJA.humedo, R_HOJA),
-  sueloSeco: curva(SUELO, POS_HOJA.seco, R_HOJA),
-};
-
-// Tramos que recorre el punto para cada hoja (el paso por adentro del nodo del
-// suelo es una recta de arriba hacia abajo de la tarjeta).
-const DENTRO_SUELO = `M${arriba(SUELO, NODO_MEDIO_ALTO)} L${abajo(SUELO)}`;
-const DENTRO_RAIZ = `M${RAIZ.x},${RAIZ.y - NODO_MEDIO_ALTO} L${abajo(RAIZ)}`;
-const TRAMOS: Record<Hoja, string[]> = {
-  frio: [DENTRO_RAIZ, RAMAS.raizFrio],
-  humedo: [DENTRO_RAIZ, RAMAS.raizSuelo, DENTRO_SUELO, RAMAS.sueloHumedo],
-  seco: [DENTRO_RAIZ, RAMAS.raizSuelo, DENTRO_SUELO, RAMAS.sueloSeco],
-};
+/** Tramos que recorre el punto: el paso por adentro de cada nodo y la rama al siguiente. */
+function tramosDe(camino: number[], pos: Pos[]): string[] {
+  const out: string[] = [];
+  for (let k = 0; k < camino.length - 1; k++) {
+    out.push(dentro(pos[camino[k]]), curva(pos[camino[k]], pos[camino[k + 1]]));
+  }
+  return out;
+}
 
 // Velocidad del punto y pausas (ms). Se para en cada nodo y más en la hoja.
 const PX_POR_MS = 0.16;
 const PAUSA_NODO = 650;
 const PAUSA_HOJA = 1500;
 
-function usarRecorrido(hoja: Hoja | null) {
+function usarRecorrido(tramos: string[]) {
   const punto = useRef<SVGGElement>(null);
   const medidas = useRef<SVGPathElement[]>([]);
+  const clave = tramos.join("|");
   useEffect(() => {
     const g = punto.current;
-    if (!g || !hoja) return;
-    // Sólo los tramos de esta hoja: la ref puede tener los de una hoja anterior.
-    const tramos = medidas.current.slice(0, TRAMOS[hoja].length);
-    const largos = tramos.map((p) => p.getTotalLength());
+    if (!g || !tramos.length) return;
+    // Sólo los tramos de este camino: la ref puede tener los de uno anterior.
+    const paths = medidas.current.slice(0, tramos.length);
+    const largos = paths.map((p) => p.getTotalLength());
     // Plan: [tramo, ms de viaje] intercalado con pausas.
     const plan: { tramo: number | null; ms: number }[] = [];
     largos.forEach((l, i) => {
@@ -72,10 +92,10 @@ function usarRecorrido(hoja: Hoja | null) {
 
     const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const ubicar = (i: number, f: number) => {
-      const p = tramos[i].getPointAtLength(largos[i] * f);
+      const p = paths[i].getPointAtLength(largos[i] * f);
       g.setAttribute("transform", `translate(${p.x},${p.y})`);
     };
-    if (quieto) { ubicar(tramos.length - 1, 1); return; }
+    if (quieto) { ubicar(paths.length - 1, 1); return; }
 
     let raf = 0;
     const t0 = performance.now();
@@ -95,7 +115,8 @@ function usarRecorrido(hoja: Hoja | null) {
     };
     raf = requestAnimationFrame(cuadro);
     return () => cancelAnimationFrame(raf);
-  }, [hoja]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clave]);
   return { punto, medidas };
 }
 
@@ -121,91 +142,109 @@ function MiniLirio({ clase }: { clase: Clase }) {
   );
 }
 
-function Nodo({ x, y, pregunta, valor, activo }: {
-  x: number; y: number; pregunta: string; valor: string; activo: boolean;
+const coma = (v: number, d: number) => v.toFixed(d).replace(".", ",");
+const umbralTexto = (v: number) => coma(v, Number.isInteger(v) ? 0 : Number.isInteger(v * 10) ? 1 : 2);
+
+function Pregunta({ p, feature, umbral, valor, activo }: {
+  p: Pos; feature: string; umbral: number; valor: number | null; activo: boolean;
 }) {
+  const f = FEATURE[feature] ?? { texto: feature, unidad: "", decimales: 1 };
   return (
-    <g className={`arbol-nodo${activo ? " arbol--activo" : ""}`} transform={`translate(${x},${y})`}>
-      <rect x="-118" y={-NODO_MEDIO_ALTO} width="236" height={NODO_MEDIO_ALTO * 2} rx="14" />
-      <text y="-6" textAnchor="middle" className="arbol-pregunta">{pregunta}</text>
-      <text y="16" textAnchor="middle" className="arbol-valor">{valor}</text>
+    <g className={`arbol-nodo${activo ? " arbol--activo" : ""}`} transform={`translate(${p.x},${p.y})`}>
+      <rect x={-NODO_ANCHO / 2} y={-NODO_MEDIO_ALTO} width={NODO_ANCHO} height={NODO_MEDIO_ALTO * 2} rx="14" />
+      <text y="-5" textAnchor="middle" className="arbol-pregunta">
+        ¿{f.texto} ≤ {umbralTexto(umbral)} {f.unidad}?
+      </text>
+      <text y="15" textAnchor="middle" className="arbol-valor">
+        {valor !== null ? `ahora: ${coma(valor, f.decimales)} ${f.unidad}` : "ahora: sin dato"}
+      </text>
     </g>
   );
 }
 
-function HojaArbol({ hoja, activa }: { hoja: Hoja; activa: boolean }) {
-  const { x, y } = POS_HOJA[hoja];
-  const { clase, proba } = HOJAS[hoja];
-  const p = proba[["saludable", "estresada", "marchita"].indexOf(clase)];
+function HojaArbol({ p, clase, proba, activa }: { p: Pos; clase: Clase; proba: number[]; activa: boolean }) {
+  const pr = proba[CLASES.indexOf(clase)];
   return (
-    <g className={`arbol-hoja lirio--${clase}${activa ? " arbol--activo" : ""}`} transform={`translate(${x},${y})`}>
+    <g className={`arbol-hoja lirio--${clase}${activa ? " arbol--activo" : ""}`} transform={`translate(${p.x},${p.y})`}>
       <circle r={R_HOJA} className="arbol-hoja-fondo" />
-      <g transform="translate(0,6)"><MiniLirio clase={clase} /></g>
-      <text y={R_HOJA + 18} textAnchor="middle" className="arbol-hoja-nombre">{NOMBRE[clase]}</text>
-      <text y={R_HOJA + 34} textAnchor="middle" className="arbol-valor">p = {p.toFixed(2).replace(".", ",")}</text>
+      <g transform="translate(0,6) scale(0.85)"><MiniLirio clase={clase} /></g>
+      <text y={R_HOJA + 17} textAnchor="middle" className="arbol-hoja-nombre">{NOMBRE[clase]}</text>
+      <text y={R_HOJA + 32} textAnchor="middle" className="arbol-valor">p = {coma(pr, 2)}</text>
     </g>
   );
 }
 
-const etiquetaRama = (texto: string, x: number, y: number) => (
-  <text x={x} y={y} textAnchor="middle" className="arbol-rama-et">{texto}</text>
-);
-
-export function ArbolModelo({ temp_c, suelo_mv, prediccion, modeloVersion }: {
-  temp_c: number | null;
-  suelo_mv: number | null;
+export function ArbolModelo({ valores, prediccion, modeloVersion }: {
+  /** Las features de la medición actual (lib/modeloPlaca.featuresActuales). */
+  valores: Record<string, number | null>;
   prediccion: Clase | null;
   modeloVersion: string | null;
 }) {
-  const hoja = recorrido(temp_c, suelo_mv);
-  const { punto, medidas } = usarRecorrido(hoja);
-  const enCamino = (rama: keyof typeof RAMAS) =>
-    hoja !== null && (
-      (rama === "raizFrio" && hoja === "frio")
-      || (rama === "raizSuelo" && hoja !== "frio")
-      || (rama === "sueloHumedo" && hoja === "humedo")
-      || (rama === "sueloSeco" && hoja === "seco"));
-  const coma = (v: number, d: number) => v.toFixed(d).replace(".", ",");
+  const camino = recorrido(valores);
+  const tramos = camino && ARMADO ? tramosDe(camino, ARMADO.pos) : [];
+  const { punto, medidas } = usarRecorrido(tramos);
+
+  if (!NODOS || !ARMADO) {
+    return <p className="lirio__pie arbol__pie">El modelo vigente ({VERSION_ARBOL}) no es un árbol: no hay nada que dibujar.</p>;
+  }
+  const { pos, ancho, alto } = ARMADO;
+  const hojaFinal = camino ? NODOS[camino[camino.length - 1]] : null;
+  const claseFinal = hojaFinal && esHoja(hojaFinal) ? hojaFinal.clase : null;
+  const enCamino = (a: number, b: number) => {
+    if (!camino) return false;
+    const k = camino.indexOf(a);
+    return k >= 0 && camino[k + 1] === b;
+  };
+  const faltan = NODOS.filter((n) => !esHoja(n) && (valores[n.feature] ?? null) === null)
+    .map((n) => (esHoja(n) ? "" : FEATURE[n.feature]?.texto ?? n.feature));
   const otraVersion = modeloVersion !== null && modeloVersion !== VERSION_ARBOL;
+  const preguntas = PROFUNDIDAD ?? 0;
 
   return (
     <div className="arbol">
-      <svg viewBox="0 0 760 400" role="img"
-           aria-label={hoja ? `La medición actual cae en la hoja ${NOMBRE[HOJAS[hoja].clase]}` : "Árbol de decisión de la placa"}>
-        {Object.entries(RAMAS).map(([k, d]) => (
-          <path key={k} d={d} className={`arbol-rama${enCamino(k as keyof typeof RAMAS) ? " arbol--activo" : ""}`} />
+      <svg viewBox={`0 0 ${ancho} ${alto}`} role="img"
+           aria-label={claseFinal ? `La medición actual cae en la hoja ${NOMBRE[claseFinal]}` : "Árbol de decisión de la placa"}>
+        {NODOS.map((n, i) => esHoja(n) ? null : (
+          <g key={`r${i}`}>
+            {([["sí", n.si], ["no", n.no]] as const).map(([et, h]) => {
+              const a = pos[i];
+              const b = pos[h];
+              const yEt = (base(a) + tope(b)) / 2 - 4;
+              const xEt = (a.x + b.x) / 2 + (et === "sí" ? -12 : 12);
+              return (
+                <g key={et}>
+                  <path d={curva(a, b)} className={`arbol-rama${enCamino(i, h) ? " arbol--activo" : ""}`} />
+                  <text x={xEt} y={yEt} textAnchor="middle" className="arbol-rama-et">{et}</text>
+                </g>
+              );
+            })}
+          </g>
         ))}
-        {etiquetaRama("sí", 236, 160)}
-        {etiquetaRama("no", 490, 112)}
-        {etiquetaRama("sí", 482, 238)}
-        {etiquetaRama("no", 642, 238)}
 
-        <Nodo x={RAIZ.x} y={RAIZ.y} pregunta={`¿temp. del aire ≤ ${coma(CORTE_TEMP_C, 2)} °C?`}
-              valor={temp_c !== null ? `ahora: ${coma(temp_c, 1)} °C` : "ahora: sin dato"} activo={hoja !== null} />
-        <Nodo x={SUELO.x} y={SUELO.y} pregunta={`¿sonda de suelo ≤ ${coma(CORTE_SUELO_MV, 1)} mV?`}
-              valor={suelo_mv !== null ? `ahora: ${Math.round(suelo_mv)} mV` : "ahora: sin dato"}
-              activo={hoja === "humedo" || hoja === "seco"} />
-        {(Object.keys(POS_HOJA) as Hoja[]).map((h) => <HojaArbol key={h} hoja={h} activa={h === hoja} />)}
+        {NODOS.map((n, i) => esHoja(n)
+          ? <HojaArbol key={i} p={pos[i]} clase={n.clase} proba={n.proba} activa={!!camino && camino[camino.length - 1] === i} />
+          : <Pregunta key={i} p={pos[i]} feature={n.feature} umbral={n.umbral}
+                      valor={valores[n.feature] ?? null} activo={!!camino?.includes(i)} />)}
 
         {/* Trayectos invisibles que sigue el punto. */}
-        {hoja && TRAMOS[hoja].map((d, i) => (
-          <path key={`${hoja}-${i}`} d={d} fill="none" stroke="none"
+        {tramos.map((d, i) => (
+          <path key={`${camino!.join("-")}-${i}`} d={d} fill="none" stroke="none"
                 ref={(el) => { if (el) medidas.current[i] = el; }} />
         ))}
-        {hoja && (
-          <g ref={punto} className="arbol-punto" transform={`translate(${RAIZ.x},${RAIZ.y - NODO_MEDIO_ALTO})`}>
+        {tramos.length > 0 && (
+          <g ref={punto} className="arbol-punto" transform={`translate(${pos[0].x},${pos[0].y - NODO_MEDIO_ALTO})`}>
             <circle r="13" className="arbol-punto-halo" />
             <circle r="6.5" className="arbol-punto-centro" />
           </g>
         )}
       </svg>
       <p className="lirio__pie arbol__pie">
-        {hoja
-          ? <>La medición actual cae en <b>{NOMBRE[HOJAS[hoja].clase]}</b>.</>
-          : <>Falta {temp_c === null ? "la temperatura del aire" : "la lectura de la sonda"} para recorrer el árbol.</>}
+        {claseFinal
+          ? <>La medición actual cae en <b>{NOMBRE[claseFinal]}</b>.</>
+          : <>Falta {[...new Set(faltan)].join(" y ")} para recorrer el árbol.</>}
         {prediccion && <> La placa predijo <b>{NOMBRE[prediccion]}</b>.</>}
-        {" "}Modelo {VERSION_ARBOL}: profundidad 2, dos preguntas por predicción, 81 B en la flash.
-        {otraVersion && <span className="arbol__aviso"> Ojo: la placa reporta {modeloVersion}; este dibujo es de {VERSION_ARBOL}.</span>}
+        {" "}Modelo {VERSION_ARBOL}: profundidad {preguntas}, hasta {preguntas} preguntas por predicción, {FLASH_B} B en la flash.
+        {otraVersion && <span className="arbol__aviso"> Ojo: la placa reporta {modeloVersion}; este dibujo es de {VERSION_ARBOL}. Hay que volver a flashearla.</span>}
       </p>
     </div>
   );

@@ -22,7 +22,13 @@ CLASES = ["saludable", "estresada", "marchita"]
 CODIGO_CLASE = {"sin_etiquetar": 0, "saludable": 1, "estresada": 2, "marchita": 3}
 CLASE_CODIGO = {v: k for k, v in CODIGO_CLASE.items()}
 
-SNAPSHOT_VIGENTE = DATOS / "mediciones_raw_2026-10-21.csv"
+SNAPSHOT_VIGENTE = DATOS / "mediciones_raw_2026-10-23.csv"
+
+# Hay UNA sola maceta. Del 03/10 al 18/10 sus mediciones quedaron en la base con
+# el identificador "maceta-02" por error (data/README.md):
+# son la misma planta y la misma serie. Al leer un snapshot se unifican.
+MACETA = "maceta-01"
+ALIAS_MACETA = ("maceta-02",)
 
 __all__ = ["RAIZ", "DATOS", "FIGURAS", "CLASES", "CODIGO_CLASE", "CLASE_CODIGO",
-           "SNAPSHOT_VIGENTE"]
+           "SNAPSHOT_VIGENTE", "MACETA", "ALIAS_MACETA"]

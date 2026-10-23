@@ -3,7 +3,7 @@
     cd ml && /opt/anaconda3/bin/python -m plantaia_ml.exportar_c
 
 Reentrena el modelo de `modelos.CONFIG_FINAL` con la serie completa de
-maceta-01 y escribe tres archivos:
+maceta-01 y escribe estos archivos:
 
 - `firmware/lib/plantaia_ml/modelo_plantaia.h` — el modelo, con la API fija
   de firmware/lib/plantaia_ml/README.md §5.
@@ -13,6 +13,9 @@ maceta-01 y escribe tres archivos:
 - `firmware/test/test_features/paridad_features.h` — una secuencia cruda del
   snapshot real con reinicios, huecos, faltantes y la sonda saturada, y los
   vectores que da `features.py`, para la paridad de features Python↔C.
+- `frontend/src/modelo_placa.json` — versión y nodos del modelo (si es un
+  árbol) para que el dashboard dibuje el árbol que corre en la placa y avise
+  si la placa reporta otra versión.
 
 Sin dependencias nuevas: numpy, pandas y sklearn.
 
@@ -45,6 +48,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -63,6 +67,7 @@ from .modelos import matriz_X
 RUTA_MODELO = RAIZ / "firmware" / "lib" / "plantaia_ml" / "modelo_plantaia.h"
 RUTA_VECTORES = RAIZ / "firmware" / "test" / "test_modelo" / "vectores.h"
 RUTA_PARIDAD = RAIZ / "firmware" / "test" / "test_features" / "paridad_features.h"
+RUTA_FRONT = RAIZ / "frontend" / "src" / "modelo_placa.json"
 
 
 # ─── Utilidades ───────────────────────────────────────────────────────────
@@ -395,7 +400,7 @@ def generar_vectores(modelo: Pipeline, Xv: np.ndarray) -> str:
     L = ["// GENERADO por ml/plantaia_ml/exportar_c.py — no editar.",
          "// Vectores de paridad del modelo: features (orden del contrato §4), la clase",
          "// que da sklearn y sus probabilidades. test_modelo exige 100 % de clase.",
-         f"// {len(Xv)} vectores: filas de la serie de maceta-01 y casos con una feature",
+         f"// {len(Xv)} vectores: filas de la serie de modelado y casos con una feature",
          "// en cada umbral del modelo y en el float32 inmediatamente arriba y abajo.",
          "#pragma once", "",
          f'#define VEC_MODELO_VERSION "{version_modelo(modelo)}"', "",
@@ -496,6 +501,57 @@ def generar_paridad(s: pd.DataFrame) -> tuple[str, pd.DataFrame]:
     return "\n".join(L) + "\n", f
 
 
+# ─── Resumen para el dashboard ────────────────────────────────────────────
+def nodos_arbol(modelo: Pipeline) -> list[dict] | None:
+    """El árbol de la placa nodo por nodo, para dibujarlo en el dashboard.
+
+    Lista en preorden; el índice es el id. Nodo interno: `feature`, `umbral`
+    (el de sklearn redondeado a 2 decimales, sólo para mostrar) y los hijos `si`
+    (x ≤ umbral) y `no`. Hoja: `clase` y `proba` (saludable, estresada,
+    marchita), las mismas que devuelve `plantaia_predecir`. Se exporta el árbol
+    entero, también las ramas cuyas dos hojas dan la misma clase: es lo que
+    corre en la placa. Si el modelo no es un árbol devuelve None.
+    """
+    cols, _, clf = _partes(modelo)
+    if not isinstance(clf, DecisionTreeClassifier):
+        return None
+    t = clf.tree_
+    nodos: list[dict] = []
+
+    def visitar(n):
+        i = len(nodos)
+        nodos.append({})
+        if t.children_left[n] == -1:
+            v = t.value[n][0] / t.value[n][0].sum()
+            nodos[i] = {"clase": CLASES[int(clf.classes_[int(np.argmax(v))]) - 1],
+                        "proba": [round(float(x), 3) for x in v]}
+        else:
+            si = visitar(t.children_left[n])
+            no = visitar(t.children_right[n])
+            nodos[i] = {"feature": FEATURES[cols[t.feature[n]]],
+                        "umbral": round(float(t.threshold[n]), 2), "si": si, "no": no}
+        return i
+
+    visitar(0)
+    return nodos
+
+
+def generar_json_front(modelo: Pipeline, metricas: dict, fecha: str | None = None) -> str:
+    cols, _, clf = _partes(modelo)
+    datos = {
+        "_generado": "por ml/plantaia_ml/exportar_c.py — no editar",
+        "version": version_modelo(modelo),
+        "fecha": fecha or _dt.date.today().isoformat(),
+        "tipo": type(clf).__name__,
+        "profundidad": int(clf.get_depth()) if isinstance(clf, DecisionTreeClassifier) else None,
+        "features": [FEATURES[c] for c in cols],
+        "flash_B": bytes_parametros_c(modelo),
+        "nodos": nodos_arbol(modelo),
+        "metricas": {k: v for k, v in metricas.items() if k.startswith("[config. final fija]")},
+    }
+    return json.dumps(datos, ensure_ascii=False, indent=2) + "\n"
+
+
 # ─── Entrenamiento y métricas del modelo final ────────────────────────────
 def metricas_cv(df: pd.DataFrame) -> dict:
     """Métricas por episodio para la cabecera del header (mismas particiones que el notebook).
@@ -546,13 +602,15 @@ def exportar(modelo: Pipeline, df: pd.DataFrame, metricas: dict | None = None,
     Xv = vectores_prueba(modelo, X)
     vect = generar_vectores(modelo, Xv)
     par, f = generar_paridad(secuencia_paridad())
+    front = generar_json_front(modelo, met)
     if escribir:
         RUTA_MODELO.write_text(header)
         RUTA_VECTORES.write_text(vect)
         RUTA_PARIDAD.write_text(par)
+        RUTA_FRONT.write_text(front)
     return {"version": version_modelo(modelo), "n_vectores": len(Xv), "n_paridad": len(f),
             "paridad_ok": int(f.valido.sum()), "paridad_resets": int((f.tramo != f.tramo.shift()).sum()),
-            "metricas": met, "rutas": [RUTA_MODELO, RUTA_VECTORES, RUTA_PARIDAD]}
+            "metricas": met, "rutas": [RUTA_MODELO, RUTA_VECTORES, RUTA_PARIDAD, RUTA_FRONT]}
 
 
 def main():

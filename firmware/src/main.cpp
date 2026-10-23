@@ -295,22 +295,33 @@ void mostrar_obs_manual() {
 }
 
 // ─── WiFi ─────────────────────────────────────────────────────────────────
-bool conectar_wifi() {
-  if (WiFi.status() == WL_CONNECTED) return true;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("WiFi");
+// Un intento contra una red, con el mismo timeout para cada una.
+bool intentar_red(const char* ssid, const char* pass) {
+  WiFi.begin(ssid, pass);
+  Serial.printf("WiFi %s", ssid);
   unsigned long t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis()-t0 < TIMEOUT_WIFI) {
     delay(500); Serial.print(".");
   }
   Serial.println();
-  bool ok = WiFi.status() == WL_CONNECTED;
+  if (WiFi.status() == WL_CONNECTED) return true;
+  WiFi.disconnect(false);  // corta el intento antes de probar la siguiente red
+  return false;
+}
+
+bool conectar_wifi() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+  WiFi.mode(WIFI_STA);
+  // La placa se mueve entre la red de la casa y el hotspot del celular: se
+  // prueban las dos en orden. WIFI_SSID_2 es opcional en secrets.h.
+  bool ok = intentar_red(WIFI_SSID, WIFI_PASSWORD);
+#ifdef WIFI_SSID_2
+  if (!ok) ok = intentar_red(WIFI_SSID_2, WIFI_PASSWORD_2);
+#endif
   if (ok) {
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");   // UTC — ver nota de Hora
     Serial.println("IP: " + WiFi.localIP().toString());
   } else {
-    WiFi.disconnect(false);  // detiene intento activo sin crashear al reconectar
     Serial.println("Sin WiFi");
   }
   return ok;

@@ -12,12 +12,12 @@ Python: `/opt/anaconda3/bin/python`, con las versiones fijadas en
 
 | módulo | qué hace |
 |---|---|
-| `__init__.py` | Rutas del repo (`RAIZ`, `DATOS`, `FIGURAS`), clases y códigos del firmware, `SNAPSHOT_VIGENTE` |
+| `__init__.py` | Rutas del repo (`RAIZ`, `DATOS`, `FIGURAS`), clases y códigos del firmware, `SNAPSHOT_VIGENTE`, `MACETA` y `ALIAS_MACETA` (el identificador viejo con el que quedaron en la base las filas del 03/10 al 18/10) |
 | `datos_reales.py` | Carga y limpieza de los snapshots crudos de Railway (§3.1): hora (`ts_dispositivo` o `ts_servidor`), episodio por fila desde `episodios.csv`, remuestreo a 5 min por `boot_id`, marcas `post_boot` / `suelo_saturado` / `dudoso` |
 | `features.py` | Las 7 features del contrato §4 con la misma semántica que el buffer circular de la placa (tramos, faltantes, warm-up). Gemelo de `features.{h,cpp}` |
 | `dataset.py` | `serie_maceta01()`: la tabla de modelado a 5 min (features + clase + `episodio_id`), armada sólo con lo que midió la placa |
 | `modelos.py` | Candidatos, partición por episodio (`StratifiedGroupKFold`) con búsqueda anidada, estimación de costo en la ESP32 y `CONFIG_FINAL`, el modelo que va a la placa |
-| `exportar_c.py` | Reentrena `CONFIG_FINAL` y escribe el header C y los vectores de paridad (ver abajo) |
+| `exportar_c.py` | Reentrena `CONFIG_FINAL` y escribe el header C, los vectores de paridad (ver abajo) y `frontend/src/modelo_placa.json` (versión y nodos del árbol, que dibuja el dashboard) |
 
 ## Tests
 

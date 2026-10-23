@@ -115,16 +115,19 @@ usan igual la placa y el replay):
 
 ## 4. Costo en memoria y CPU
 
-Medido con `pio run -e esp32dev` (2026-10-22) con el modelo final
-`arbol-p2-f012-58e644`: árbol de decisión de profundidad 2
-(`min_samples_leaf=100`), entrenado con `suelo_mv`, `suelo_delta_1h` y
-`temp_c` (el árbol sólo corta por `temp_c` y `suelo_mv`). Ver la restricción
-de diseño y la condición de seguridad en `docs/entrega2/RESULTADOS.md`.
+Medido con `pio run -e esp32dev` (2026-10-23) con el modelo final
+`arbol-p3-f03-ee3419`: árbol de decisión de profundidad 3
+(`min_samples_leaf=20`) con `suelo_mv` y `hum_aire_pct`, entrenado con
+los 24 episodios del snapshot del 23/10. Ver la restricción de diseño
+y la condición de seguridad en `docs/entrega2/RESULTADOS.md`. El modelo
+anterior (`arbol-p2-f012-58e644`, profundidad 2) daba 962 249 B de flash; el
+que está flasheado en la placa desde el 22/10 es ése, y midió `t_us=33` en la
+ESP32.
 
-| | antes (fw 1.1.0) | después (fw 2.0.0 + `arbol-p2-f012-58e644`) | diferencia |
+| | antes (fw 1.1.0) | después (fw 2.0.0 + `arbol-p3-f03-ee3419`) | diferencia |
 |---|---|---|---|
 | RAM estática | 47 548 B | 47 740 B (14,6 %) | **+192 B** |
-| Flash | 957 897 B | 962 249 B (73,4 % de 1 310 720 B) | **+4 352 B** |
+| Flash | 957 897 B | 962 509 B (73,4 % de 1 310 720 B) | **+4 612 B** |
 
 - **RAM estática.** `BufferFeatures` 124 B + `Inferencia` 56 B (+ alineación).
   Sin memoria dinámica. El modelo no suma RAM estática: sus tablas son

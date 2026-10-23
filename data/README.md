@@ -91,8 +91,9 @@ Snapshot `mediciones_raw_2026-10-21.csv`: 14.791 filas de `maceta-01` (del 12/09
 al 21/10). Las 6.523 primeras son idénticas al snapshot del 08/10.
 
 - **8.268 filas nuevas**, del 18/10 23:31 al 21/10 21:21 UTC, todas en un solo
-  arranque (`boot_id` 49). Entre el 03/10 20:35 y el 18/10 23:31 no hay **ninguna**
-  fila: 15 días con la placa desenchufada. Los `id` saltan de 6523 a 12213 porque
+  arranque (`boot_id` 49). En este snapshot, entre el 03/10 20:35 y el 18/10
+  23:31 no hay **ninguna** fila (ese tramo se cargó después: ver el snapshot
+  del 23/10). Los `id` saltan de 6523 a 12213 porque
   la base tuvo filas de otro dispositivo que se borraron; `numero_muestra` sigue
   correlativo (6522 → 6523).
 - **La cadencia sigue en 30 s y el firmware en 1.1.0** (99,6 % de los intervalos).
@@ -139,6 +140,49 @@ al 21/10). Las 6.523 primeras son idénticas al snapshot del 08/10.
 - **Termistor**: `temp_ntc_c` se mueve al revés que el DHT11 (25 °C cuando el
   DHT marca 20, 38 °C cuando marca 8,5). Ver la sección del radiador.
 
+## Snapshot del 23/10: el tramo del 03/10 al 18/10
+
+Snapshot `mediciones_raw_2026-10-23.csv`: **21.850 filas**, todas de la misma
+maceta. Las 16.616 primeras son idénticas al snapshot del 22/10.
+
+**Hay una sola maceta.** Las 4.354 filas del 03/10 20:40 al 18/10 23:25 UTC
+quedaron en la base con el identificador `maceta-02` por error; son la misma
+planta y la misma serie que `maceta-01`. Al leer un snapshot,
+`ml/plantaia_ml/datos_reales.unificar_maceta` las pasa a `maceta-01` (y
+renumera sus `boot_id` 1–4 a 1001–1004 para que no choquen con los arranques
+1–4 de septiembre). En `episodios.csv` ya figuran como `maceta-01`.
+
+### Del 03/10 al 18/10 (episodios 16 a 28)
+
+- Cubre lo que antes era el hueco del 03/10 20:35 al 18/10 23:31. Firmware
+  1.1.0, cadencia de **5 min exactos** (300 ± 1 s) con la hora alineada al
+  minuto, 4 arranques.
+- **13 pulsaciones manuales**, una por episodio, todas `manual` y ninguna
+  dudosa: el sustrato acompaña a la etiqueta en todos (saludable ~1500–1610 mV,
+  estresada ~1840–1870 mV, marchita ~1940–1960 mV).
+- **Tres ciclos casi iguales** de ~5 días: saludable → estresada (el sustrato
+  se seca) → marchita (12 h, **de día**) → **riego** a las 18:00 UTC (el
+  sustrato cae ~435 mV en una muestra) → estresada 5–6 h de recuperación →
+  saludable. Los episodios 19, 23 y 27 son esa recuperación: `estresada` con
+  el sustrato ya mojado (~1490–1520 mV), la planta tarda en recuperar turgencia.
+- Ambiente estable: 18,5–21,3 °C, 44–55 % de HR. 1.103 filas `luz_saturada`
+  (oscuridad, `luz_mv = 142`).
+- **Carga en la base**: estas filas tienen `id` 23186–27539, posteriores a la
+  fila recibida el 22/10 21:34 (id 23185), aunque su `ts_servidor` diga
+  03/10–18/10: se cargaron después. El análisis usa `ts_dispositivo`.
+
+### Del 21/10 21:21 al 22/10 21:34
+
+- 2.740 filas más del boot 49 (hasta el 22/10 20:02), todas `saludable`
+  **propagada** de la pulsación del 20/10 (ep. 15). Nadie observó la planta:
+  **no se les asigna episodio** y el notebook 03 las usa sólo como prueba sin
+  etiqueta (§6.5), igual que en la versión anterior.
+- **9 filas con firmware 2.0.0** (boots 55–58, 22/10 21:05 → 21:34): la placa
+  se flasheó. Casi todas con la sonda saturada (3124 mV, fuera del sustrato) y
+  `sin_prediccion`, tres con `hora_sin_sincronizar`. La última (muestra 17495)
+  es una pulsación `estresada` con la sonda saturada: no alcanza para abrir un
+  episodio (no hay ninguna fila utilizable después).
+
 ## El radiador del 15 y 16/09 (no son outliers)
 
 Hay 547 filas con `temperatura_c ≥ 26 °C` y **son reales**: la maceta estuvo
@@ -163,8 +207,10 @@ corregirlo, `temp_ntc_c` no sirve como temperatura (ni como respaldo del DHT11).
 
 ## Huecos de la serie
 
-La serie de maceta-01 tiene tramos sin registro de la placa (reinicios, cortes
-de luz y las dos semanas del 03/10 al 18/10). **Esos tramos quedan como
-huecos**: no se completan ni se interpolan. Las features cortan la ventana en
+La serie tiene tramos sin registro de la placa (reinicios, cortes de luz y las
+dos semanas del 17/09 al 01/10). El tramo del 03/10 al 18/10, que en los
+snapshots anteriores era un hueco, ya está en la base (ver el snapshot del
+23/10). **Los huecos quedan como huecos**: no se completan ni se interpolan.
+Las features cortan la ventana en
 cada hueco y en cada cambio de `boot_id` (contrato de ENTREGA2.md §4), igual
 que el buffer de la placa, y el modelo se entrena y evalúa sólo con lo medido.

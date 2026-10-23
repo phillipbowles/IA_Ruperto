@@ -72,7 +72,7 @@ costo). Los resultados y el modelo elegido están en el propio notebook y en
 `docs/entrega2/RESULTADOS.md`; este README no los repite.
 
 - **Datos**: sólo lo que midió la placa: la serie de `maceta-01` a 5 min y
-  sus episodios reales de `data/episodios.csv`. Los huecos de la serie quedan
+  sus episodios reales de `data/episodios.csv` (snapshot del 23/10). Los huecos de la serie quedan
   como huecos (ENTREGA2.md §3.2).
 - **Protocolo**: partición por episodio (5 folds, ninguno partido entre train
   y test), búsqueda de hiperparámetros anidada también por episodio. Las
