@@ -41,6 +41,7 @@ export function AnalisisFoto() {
   const [archivo, setArchivo] = useState<File | null>(null);
   // Se pregunta por foto: una foto vieja no se cruza con los sensores de hoy.
   const [fotoDeAhora, setFotoDeAhora] = useState(false);
+  const archivoActual = useRef<File | null>(null);
   const analisis = useMutation<Resultado, Error, { archivo: File; metodo: MetodoAnalisis }>({
     mutationFn: async ({ archivo, metodo }) =>
       enviarImagen<Resultado>(`/analisis-foto?metodo=${metodo}`, await achicar(archivo)),
@@ -51,8 +52,11 @@ export function AnalisisFoto() {
   const elegir = (archivo: File | undefined) => {
     if (!archivo || !archivo.type.startsWith("image/")) return;
     setVista(URL.createObjectURL(archivo));
+    // Reemplazar una foto apaga «la foto es de ahora»: la marca era de la
+    // anterior. Marcarlo antes de subir la primera sí vale.
+    if (archivoActual.current) setFotoDeAhora(false);
+    archivoActual.current = archivo;
     setArchivo(archivo);
-    setFotoDeAhora(false);
     analisis.mutate({ archivo, metodo });
   };
 
@@ -144,7 +148,13 @@ export function AnalisisFoto() {
         {r && <span className="lirio__pie">Analizado por {r.modelo} · no se guarda en la base</span>}
       </div>
     </section>
-    {r?.estado && <Recomendaciones estado={r.estado} fotoDeAhora={fotoDeAhora} setFotoDeAhora={setFotoDeAhora} />}
+    <Recomendaciones
+      estado={r?.estado ?? null}
+      situacion={analisis.isPending ? "analizando" : analisis.isError ? "error" : !r ? "sin_foto"
+        : !r.estado ? "no_planta" : "lista"}
+      fotoDeAhora={fotoDeAhora}
+      setFotoDeAhora={setFotoDeAhora}
+    />
     <Calibracion archivo={archivo} />
     </>
   );
