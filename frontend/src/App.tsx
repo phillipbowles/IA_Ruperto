@@ -13,6 +13,7 @@ import { DispersionTemp } from "./componentes/DispersionTemp";
 import { TablaRegistros } from "./componentes/TablaRegistros";
 import { AvatarLirio } from "./componentes/AvatarLirio";
 import { AnalisisFoto } from "./componentes/AnalisisFoto";
+import { ArbolModelo } from "./componentes/ArbolModelo";
 
 const RANGOS = [
   { id: "24h", texto: "24 h", ms: 24 * 3600e3 },
@@ -98,6 +99,14 @@ function Tablero() {
   if (!res.total) return <p className="cargando">Todavía no hay mediciones.</p>;
 
   const u = res.ultima!;
+  // Lo que mira el árbol de la placa: el último DHT11 válido y la última sonda
+  // no saturada (con la sonda fuera del sustrato la placa repite la anterior).
+  const ultimoValido = <T,>(f: (p: (typeof todos)[number]) => T | null) => {
+    for (let i = todos.length - 1; i >= 0; i--) { const v = f(todos[i]); if (v !== null) return v; }
+    return null;
+  };
+  const tempArbol = ultimoValido((p) => p.temperatura_c);
+  const sueloArbol = ultimoValido((p) => ((p.errores ?? []).includes("suelo_saturado") ? null : p.suelo_mv));
   const avisos = [
     res.ntcSospechoso && {
       nivel: "malo",
@@ -238,6 +247,18 @@ function Tablero() {
         <h2>Últimos registros</h2>
         <div className="panel">
           <TablaRegistros puntos={puntos} />
+        </div>
+      </section>
+
+      <section className="seccion">
+        <h2>Cómo decide el modelo de la placa</h2>
+        <div className="panel">
+          <p className="panel__nota">
+            El árbol de decisión que corre en la ESP32. El punto recorre el camino que sigue la medición actual hasta
+            la hoja que prende el LED.
+          </p>
+          <ArbolModelo temp_c={tempArbol} suelo_mv={sueloArbol}
+                       prediccion={u.prediccion_etiqueta} modeloVersion={u.modelo_version} />
         </div>
       </section>
 
