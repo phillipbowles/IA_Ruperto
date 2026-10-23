@@ -29,6 +29,7 @@ export const FEATURE: Record<string, { texto: string; unidad: string; decimales:
   vpd_kpa: { texto: "VPD", unidad: "kPa", decimales: 2 },
   luz_mv: { texto: "luz", unidad: "mV", decimales: 0 },
   luz_media_1h: { texto: "luz media 1 h", unidad: "mV", decimales: 0 },
+  h_desde_riego: { texto: "h desde el riego", unidad: "h", decimales: 1 },
 };
 
 /** Ids de nodos desde la raíz hasta la hoja; null si falta un dato que el árbol mira. */
@@ -48,6 +49,7 @@ export function recorrido(valores: Record<string, number | null>): number[] | nu
 
 interface PuntoSensor {
   t: number;
+  boot_id: number | null;
   suelo_mv: number | null;
   temperatura_c: number | null;
   humedad_ambiente_pct: number | null;
@@ -56,10 +58,14 @@ interface PuntoSensor {
 }
 
 const HORA_MS = 60 * 60e3;
+// Mismos parámetros que la placa (features.h).
+const RIEGO_CAIDA_MV = 250;
+const RIEGO_TOPE_H = 96;
 
-/** Las 7 features como las arma la placa con la serie que llegó a la base:
+/** Las 8 features como las arma la placa con la serie que llegó a la base:
  *  último DHT11 válido, última sonda no saturada (con la sonda fuera del
- *  sustrato la placa repite la anterior), y las ventanas de 1 h. */
+ *  sustrato la placa repite la anterior), las ventanas de 1 h y las horas
+ *  desde el último riego. */
 export function featuresActuales(serie: PuntoSensor[]): Record<string, number | null> {
   const ultimo = <T,>(f: (p: PuntoSensor) => T | null): { v: T; t: number } | null => {
     for (let i = serie.length - 1; i >= 0; i--) {
@@ -86,11 +92,27 @@ export function featuresActuales(serie: PuntoSensor[]): Record<string, number | 
     const ventana = serie.filter((p) => p.luz_mv !== null && p.t > luz.t - HORA_MS && p.t <= luz.t);
     luzMedia = ventana.reduce((s, p) => s + p.luz_mv!, 0) / ventana.length;
   }
+  // Riego: la sonda cae ≥ 250 mV entre dos lecturas válidas seguidas, pasada la
+  // primera hora del arranque (la placa no lo cuenta en warm-up). El riego
+  // sobrevive a los reinicios, como en la placa (Preferences).
+  let riegoT: number | null = null;
+  let previa: number | null = null;
+  let boot: number | null = null;
+  let inicioBoot = 0;
+  for (const p of serie) {
+    if (p.boot_id !== boot) { boot = p.boot_id; inicioBoot = p.t; previa = null; }
+    const v = sueloValido(p);
+    if (v === null) continue;
+    if (previa !== null && p.t - inicioBoot >= HORA_MS && previa - v >= RIEGO_CAIDA_MV) riegoT = p.t;
+    previa = v;
+  }
+  const hRiego = riegoT !== null && suelo ? Math.min(RIEGO_TOPE_H, (suelo.t - riegoT) / HORA_MS) : RIEGO_TOPE_H;
+
   const vpd = temp !== null && hum !== null
     ? 0.6108 * Math.exp((17.27 * temp) / (temp + 237.3)) * (1 - hum / 100)
     : null;
   return {
     suelo_mv: suelo?.v ?? null, suelo_delta_1h: delta, temp_c: temp, hum_aire_pct: hum,
-    vpd_kpa: vpd, luz_mv: luz?.v ?? null, luz_media_1h: luzMedia,
+    vpd_kpa: vpd, luz_mv: luz?.v ?? null, luz_media_1h: luzMedia, h_desde_riego: hRiego,
   };
 }
