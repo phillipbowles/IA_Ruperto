@@ -8,7 +8,7 @@
 #include "modelo_plantaia.h"
 
 #if PLANTAIA_N_FEATURES != FEAT_N
-#error "modelo_plantaia.h no usa los 7 features del contrato §4 (si es un subconjunto, el exportador remapea adentro de plantaia_predecir)"
+#error "modelo_plantaia.h no usa los 8 features del contrato §4 (si es un subconjunto, el exportador remapea adentro de plantaia_predecir)"
 #endif
 
 static const char *const ETIQUETAS_MODELO[] = {"sin_prediccion", "saludable", "estresada", "marchita"};
@@ -53,11 +53,11 @@ void plantaia_inferir(BufferFeatures *buf, const MuestraCruda *m, bool empujar,
 }
 
 // Formatos fijos por feature: los enteros en mV y % sin decimales, T con 1,
-// VPD con 2. El parser de docs/entrega2 asume exactamente esto.
+// VPD con 2, horas desde el riego con 1. El parser de docs/entrega2 asume exactamente esto.
 static int fmt_x(char *dst, size_t tam, const float x[FEAT_N]) {
-  return snprintf(dst, tam, "[%.0f,%.0f,%.1f,%.0f,%.2f,%.0f,%.0f]",
+  return snprintf(dst, tam, "[%.0f,%.0f,%.1f,%.0f,%.2f,%.0f,%.0f,%.1f]",
                   (double)x[0], (double)x[1], (double)x[2], (double)x[3],
-                  (double)x[4], (double)x[5], (double)x[6]);
+                  (double)x[4], (double)x[5], (double)x[6], (double)x[7]);
 }
 
 int plantaia_linea_inf(const Inferencia *inf, const char *tag, char *dst, size_t tam) {

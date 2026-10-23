@@ -19,8 +19,9 @@
 
 static BufferFeatures buf;
 
-static MuestraCruda muestra(float suelo, float luz, float t = 20.0f, float h = 50.0f, float ntc = 21.0f) {
-  MuestraCruda m = {suelo, luz, t, h, ntc};
+static MuestraCruda muestra(float suelo, float luz, float t = 20.0f, float h = 50.0f, float ntc = 21.0f,
+                            uint32_t ts = 0) {
+  MuestraCruda m = {suelo, luz, t, h, ntc, ts};
   return m;
 }
 
@@ -220,12 +221,64 @@ void test_reset_vacia_el_buffer(void) {
 }
 
 // ─── Paridad con features.py ──────────────────────────────────────────────
+// ─── Riego (h_desde_riego) ────────────────────────────────────────────────
+static const uint32_t T0 = 1790000000u;   // una hora cualquiera, múltiplo de 5 min no hace falta
+
+void test_riego_detectado_y_horas(void) {
+  float x[FEAT_N]; bool w;
+  for (int i = 0; i < 14; i++) {          // 14 muestras secas: ventana llena
+    MuestraCruda m = muestra(1950, 800, 20.0f, 50.0f, 21.0f, T0 + 300u * i);
+    features_empujar(&buf, &m, x, &w);
+    TEST_ASSERT_EQUAL_FLOAT(FEAT_RIEGO_TOPE_H, x[FEAT_H_DESDE_RIEGO]);   // sin riego visto
+  }
+  MuestraCruda r = muestra(1520, 800, 20.0f, 50.0f, 21.0f, T0 + 300u * 14);   // cae 430 mV
+  features_empujar(&buf, &r, x, &w);
+  TEST_ASSERT_EQUAL_UINT32(T0 + 300u * 14, buf.riego_ts);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, x[FEAT_H_DESDE_RIEGO]);
+  for (int i = 15; i < 21; i++) {         // 6 muestras más = 30 min
+    MuestraCruda m = muestra(1515, 800, 20.0f, 50.0f, 21.0f, T0 + 300u * i);
+    features_empujar(&buf, &m, x, &w);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.5f, x[FEAT_H_DESDE_RIEGO]);
+  // Reinicio: main.cpp restaura riego_ts de Preferences y las horas siguen contando.
+  uint32_t riego = buf.riego_ts;
+  features_reset(&buf);
+  buf.riego_ts = riego;
+  MuestraCruda m = muestra(1515, 800, 20.0f, 50.0f, 21.0f, T0 + 300u * 14 + 7200u);
+  features_empujar(&buf, &m, x, &w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 2.0f, x[FEAT_H_DESDE_RIEGO]);
+}
+
+void test_riego_no_cuenta_en_warmup_ni_repetido(void) {
+  float x[FEAT_N]; bool w;
+  // Caída de 800 mV a la 3.ª muestra tras el arranque (sonda recién metida): warm-up, no es riego.
+  MuestraCruda a = muestra(2700, 800, 20.0f, 50.0f, 21.0f, T0);
+  MuestraCruda b = muestra(2650, 800, 20.0f, 50.0f, 21.0f, T0 + 300u);
+  MuestraCruda c = muestra(1850, 800, 20.0f, 50.0f, 21.0f, T0 + 600u);
+  features_empujar(&buf, &a, x, &w);
+  features_empujar(&buf, &b, x, &w);
+  features_empujar(&buf, &c, x, &w);
+  TEST_ASSERT_EQUAL_UINT32(0u, buf.riego_ts);
+  // Sin hora (ts = 0) tampoco se registra aunque la caída sea grande.
+  for (int i = 0; i < 14; i++) { MuestraCruda m = muestra(1950, 800); features_empujar(&buf, &m, x, &w); }
+  MuestraCruda d = muestra(1500, 800);
+  features_empujar(&buf, &d, x, &w);
+  TEST_ASSERT_EQUAL_UINT32(0u, buf.riego_ts);
+  TEST_ASSERT_EQUAL_FLOAT(FEAT_RIEGO_TOPE_H, x[FEAT_H_DESDE_RIEGO]);
+}
+
 void test_paridad_con_python(void) {
 #ifdef HAY_PARIDAD_FEATURES
   float x[FEAT_N]; bool w;
   for (int i = 0; i < PAR_N; i++) {
-    if (PAR_RESET[i]) features_reset(&buf);
-    MuestraCruda m = {PAR_CRUDO[i][0], PAR_CRUDO[i][1], PAR_CRUDO[i][2], PAR_CRUDO[i][3], PAR_CRUDO[i][4]};
+    if (PAR_RESET[i]) {
+      // Reinicio: la ventana se vacía pero el último riego vuelve de Preferences.
+      uint32_t riego = buf.riego_ts;
+      features_reset(&buf);
+      buf.riego_ts = riego;
+    }
+    MuestraCruda m = {PAR_CRUDO[i][0], PAR_CRUDO[i][1], PAR_CRUDO[i][2], PAR_CRUDO[i][3], PAR_CRUDO[i][4],
+                      PAR_TS[i]};
     bool ok = features_empujar(&buf, &m, x, &w);
     char msg[48];
     snprintf(msg, sizeof(msg), "fila %d", i);
@@ -259,6 +312,8 @@ int main(int, char **) {
   RUN_TEST(test_sin_dht_ni_termistor_no_infiere);
   RUN_TEST(test_consultar_no_modifica_el_buffer);
   RUN_TEST(test_reset_vacia_el_buffer);
+  RUN_TEST(test_riego_detectado_y_horas);
+  RUN_TEST(test_riego_no_cuenta_en_warmup_ni_repetido);
   RUN_TEST(test_paridad_con_python);
   return UNITY_END();
 }

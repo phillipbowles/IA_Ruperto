@@ -8,7 +8,7 @@ manda (nombres, orden, unidades) es [docs/ENTREGA2.md](../../../docs/ENTREGA2.md
 
 | archivo | qué hace |
 |---|---|
-| `features.h/.cpp` | `BufferFeatures` (ventana circular de 13 muestras) y las 7 features |
+| `features.h/.cpp` | `BufferFeatures` (ventana circular de 13 muestras, último riego) y las 8 features |
 | `modelo_plantaia.h` | el modelo: `plantaia_predecir()`. **GENERADO** por `ml/plantaia_ml/exportar_c.py`: no se edita a mano |
 | `inferencia.h/.cpp` | un paso completo (features → modelo → cronómetro) y las líneas de log `[INF]`/`[FAL]` |
 
@@ -20,7 +20,7 @@ vuelta del `loop()` tras el arranque:
 ```
 leer_sensores()           mediana de 9 con analogReadMilliVolts, DHT11 con 3 reintentos
   → muestra_cruda()       faltante = NAN (nunca 0); sonda de suelo saturada = NAN
-  → plantaia_inferir()    empuja al buffer, arma x[7], llama a plantaia_predecir()
+  → plantaia_inferir()    empuja al buffer, detecta riegos, arma x[8], llama a plantaia_predecir()
                           y mide su duración con micros()
   → actualizar_semaforo() verde 27 = saludable, amarillo 26 = estresada, rojo 25 = marchita
   → Serial                [FAL] (si hubo faltantes) + [INF]
@@ -71,6 +71,7 @@ Sólo guarda `suelo_mv` y `luz_mv`; de T y HR alcanza con el último válido.
 | 4 | `vpd_kpa` | `0.6108·exp(17.27·T/(T+237.3))·(1 − HR/100)` con 2 y 3 |
 | 5 | `luz_mv` | la muestra actual (o la anterior repetida) |
 | 6 | `luz_media_1h` | media de las ≤ 13 muestras de la ventana, incluida la actual |
+| 7 | `h_desde_riego` | horas desde el último riego (caída de la sonda ≥ 250 mV fuera de warm-up); 96 si no hubo. `riego_ts` se guarda en Preferences y sobrevive a los reinicios; sin hora NTP no se registran riegos |
 
 **Warm-up.** Mientras haya menos de 12 muestras *anteriores* a la actual (las
 primeras 12 tras el arranque, ~55 min), `suelo_delta_1h = 0`, la media de luz
@@ -102,12 +103,14 @@ Una línea por tick, parseable (el formato lo arma `plantaia_linea_inf()`, que
 usan igual la placa y el replay):
 
 ```
-[INF] n=123 warmup=0 x=[1532,-41,20.6,47,1.29,871,850] -> estresada p=[0.10,0.78,0.12] t_us=37
+[INF] n=123 warmup=0 x=[1532,-41,20.6,47,1.29,871,850,96.0] -> estresada p=[0.10,0.78,0.12] t_us=37
+[RIE] riego detectado ts=1792787700
 ```
 
 - `n`: muestras empujadas a la ventana desde el arranque (no es `n_muestra`
   del POST, que sólo avanza si el servidor confirma).
-- `x`: los 7 features en orden; mV y % sin decimales, T con 1, VPD con 2.
+- `x`: los 8 features en orden; mV y % sin decimales, T con 1, VPD con 2, horas desde el riego con 1.
+- `[RIE]`: se detectó un riego en este tick y se guardó en Preferences.
 - `p`: probabilidades saludable/estresada/marchita.
 - `t_us`: duración de `plantaia_predecir()` sola, medida con `micros()`.
 - Sin predicción: `-> sin_prediccion p=[] t_us=0`.
@@ -115,52 +118,34 @@ usan igual la placa y el replay):
 
 ## 4. Costo en memoria y CPU
 
-Medido con `pio run -e esp32dev` (2026-10-23) con el modelo final
-`arbol-p3-f03-ee3419`: árbol de decisión de profundidad 3
-(`min_samples_leaf=20`) con `suelo_mv` y `hum_aire_pct`, entrenado con
-los 24 episodios del snapshot del 23/10. Ver la restricción de diseño
-y la condición de seguridad en `docs/entrega2/RESULTADOS.md`. El modelo
-anterior (`arbol-p2-f012-58e644`, profundidad 2) daba 962 249 B de flash; el
-que está flasheado en la placa desde el 22/10 es ése, y midió `t_us=33` en la
-ESP32.
+Medido con `pio run -e esp32dev` (2026-10-23), firmware 2.1.0 con el modelo
+final `regla-p3-f07-79b556`: la regla sonda + riego (`h_desde_riego` ≤ 5,5 h →
+estresada; si no, `suelo_mv` ≤ 1716 → saludable, ≤ 1940 → estresada, si no →
+marchita), exportada como un árbol de 7 nodos. Métricas y justificación en
+`docs/entrega2/RESULTADOS.md`. El 22/10 la placa corría el 2.0.0 con
+`arbol-p2-f012-58e644` y midió `t_us=33` en la ESP32.
 
-| | antes (fw 1.1.0) | después (fw 2.0.0 + `arbol-p3-f03-ee3419`) | diferencia |
+| | antes (fw 1.1.0) | después (fw 2.1.0 + `regla-p3-f07-79b556`) | diferencia |
 |---|---|---|---|
-| RAM estática | 47 548 B | 47 740 B (14,6 %) | **+192 B** |
-| Flash | 957 897 B | 962 509 B (73,4 % de 1 310 720 B) | **+4 612 B** |
+| RAM estática | 47 548 B | 47 748 B (14,6 %) | **+200 B** |
+| Flash | 957 897 B | 962 809 B (73,5 % de 1 310 720 B) | **+4 912 B** |
 
-- **RAM estática.** `BufferFeatures` 124 B + `Inferencia` 56 B (+ alineación).
+- **RAM estática.** `BufferFeatures` (ventana + `riego_ts`) e `Inferencia`.
   Sin memoria dinámica. El modelo no suma RAM estática: sus tablas son
   `static const` y quedan en flash.
-- **Stack en el tick.**
-  - La copia del buffer en `features_consultar()`: 124 B, sólo en el envío
-    forzado.
-  - La línea de log: 200 B.
-  - ~16 B de RAM del modelo durante la predicción (estimación de
-    `costo_esp32`, `docs/entrega2/RESULTADOS.md`).
-- **Flash del modelo: 81 B de tablas** en el header exportado (igual a la
-  estimación de `costo_esp32` y a `exportar_c.bytes_parametros_c`), muy por
-  debajo del presupuesto de 32 KB.
-  - 5 nodos (2 internos y 3 hojas), profundidad 2: feature `int8`, umbral
-    `float`, hijos `int16`.
-  - 3 hojas × 3 probabilidades `float`.
-  - El resto de la diferencia de flash es el código de la librería
-    (`features.cpp`, `inferencia.cpp`), `expf` y el formateo de floats que
-    trae libc.
-- **CPU por tick.**
-  - 13 sumas para la media de luz y un `expf` para el VPD (la placa arma
-    siempre los 7 features, aunque el modelo use menos).
-  - El modelo: un recorrido iterativo de **≤ 2 comparaciones** hasta la hoja
-    y el argmax de 3 probabilidades (`costo_esp32` estima 4 operaciones,
-    ~0,17 µs en la ESP32).
-  - El presupuesto del contrato (§5.3) es **< 1 ms por inferencia** y
-    **< 32 KB de flash** para el modelo.
-- **Tiempo medido en el host, no en la placa**
-  (`docs/entrega2/logs/replay_host.txt`, 150 inferencias):
-  `t_us` de 0–1 µs (113 en 0 µs, 37 en 1 µs; máximo 1 µs).
-
-  El número real de la ESP32 sale del log de la placa (`t_us` en cada
-  `[INF]`), pendiente de flashear.
+- **Stack en el tick.** La copia del buffer en `features_consultar()` (sólo
+  en el envío forzado) y la línea de log (200 B).
+- **Flash del modelo: 111 B de tablas** (7 nodos: feature `int8`, umbral
+  `float`, hijos `int16`; 4 hojas × 3 probabilidades `float`). El resto de la
+  diferencia es el código de la librería, `expf` y el formateo de floats.
+- **CPU por tick.** 13 sumas para la media de luz, un `expf` para el VPD (la
+  placa arma siempre las 8 features) y el modelo: **≤ 3 comparaciones** hasta
+  la hoja más el argmax de 3 probabilidades. Presupuesto del contrato (§5.3):
+  **< 1 ms** y **< 32 KB** de flash.
+- **Tiempo medido en el host** (`docs/entrega2/logs/replay_host.txt`, 200
+  inferencias): 0–1 µs salvo un pico de 33 µs del reloj del host. El número de
+  la ESP32 sale del `t_us` de cada `[INF]` del log de la placa
+  (`firmware/tools/flashear_y_registrar.sh`).
 
 Si se cambia el modelo, actualizar esta tabla con la salida de `pio run`.
 
@@ -171,7 +156,7 @@ carpeta) y **`firmware/test/test_modelo/vectores.h`**. Nada más cambia: el
 firmware y los tests sólo dependen de esta API.
 
 ```c
-#define PLANTAIA_N_FEATURES 7            // siempre 7: la placa arma el vector completo
+#define PLANTAIA_N_FEATURES 8            // siempre 8: la placa arma el vector completo
 #define PLANTAIA_MODELO_VERSION "..."    // viaja en el POST como modelo_version
 // Devuelve el código de clase 1..3; si proba != NULL escribe proba[0..2]
 // en el orden saludable, estresada, marchita (suman 1).
@@ -201,7 +186,7 @@ Reglas para el header generado:
 ```c
 #pragma once
 #define VEC_MODELO_VERSION "..."         // == PLANTAIA_MODELO_VERSION; si no, el test falla
-static const float VEC_X[][7] = { {...}, ... };   // features en el orden del contrato
+static const float VEC_X[][8] = { {...}, ... };   // features en el orden del contrato
 static const int   VEC_Y[]    = { 1, 3, ... };    // clase que da el modelo en Python
 static const int   VEC_N      = (int)(sizeof(VEC_Y) / sizeof(VEC_Y[0]));
 // Opcional: probabilidades de Python, se comparan con tolerancia 2e-3.
@@ -226,7 +211,7 @@ static const float PAR_CRUDO[][5] = { {...}, ... };
 static const int   PAR_RESET[]    = { 1, 0, ... };   // 1 = vaciar el buffer antes (boot_id/tramo nuevo)
 static const int   PAR_OK[]       = { 1, 1, ... };   // 1 = hay vector (se puede inferir)
 static const int   PAR_WARMUP[]   = { 1, 1, ... };
-static const float PAR_X[][7]     = { {...}, ... };  // lo que da features.py (si PAR_OK = 0, cualquiera)
+static const float PAR_X[][8]     = { {...}, ... };  // lo que da features.py (si PAR_OK = 0, cualquiera)
 static const int   PAR_N          = ...;
 ```
 
@@ -254,13 +239,13 @@ tools/correr_replay.sh                # replay → docs/entrega2/logs/replay_hos
   `tools/generar_replay.py` desde un CSV crudo remuestreado a 5 min (mediana
   por bin). Un bin vacío o un cambio de `boot_id` corta la ventana (vacía el
   buffer), igual que `asignar_tramos()` en `ml/plantaia_ml/features.py`. El
-  tramo por defecto (19/10 14:00Z, 150 muestras) cruza un riego. Se pueden
+  tramo por defecto (19/10 14:00Z, 200 muestras) cruza un riego y la vuelta a `saludable` 5,6 h después. Se pueden
   sumar otros tramos medidos repitiendo `--tramo`:
 
   ```bash
   /opt/anaconda3/bin/python firmware/tools/generar_replay.py \
-      --tramo data/mediciones_raw_2026-10-21.csv maceta-01 2026-10-19T14:00Z 150 \
-      --tramo data/mediciones_raw_2026-10-21.csv maceta-01 <desde> 150
+      --tramo data/mediciones_raw_2026-10-23.csv maceta-01 2026-10-19T14:00Z 200 \
+      --tramo data/mediciones_raw_2026-10-23.csv maceta-01 <desde> 150
   firmware/tools/correr_replay.sh
   ```
 

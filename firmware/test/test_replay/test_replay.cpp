@@ -59,8 +59,11 @@ void test_replay_tramos(void) {
     const FilaReplay &f = REPLAY[i];
     if (f.corte) {
       // Tramo nuevo, reinicio de la placa o hueco en el dato: la ventana
-      // arranca de cero (igual que asignar_tramos() en features.py).
+      // arranca de cero (igual que asignar_tramos() en features.py). El
+      // último riego se conserva, como hace main.cpp desde Preferences.
+      uint32_t riego = buf.riego_ts;
       features_reset(&buf);
+      buf.riego_ts = riego;
       time_t ts = (time_t)f.ts_unix;
       char hora[24];
       strftime(hora, sizeof(hora), "%Y-%m-%dT%H:%MZ", gmtime(&ts));
@@ -68,7 +71,7 @@ void test_replay_tramos(void) {
                REPLAY_TRAMOS[f.tramo], (unsigned)f.boot_id);
       emitir(linea);
     }
-    MuestraCruda m = {f.suelo_mv, f.luz_mv, f.temp_dht_c, f.hum_aire_pct, f.temp_ntc_c};
+    MuestraCruda m = {f.suelo_mv, f.luz_mv, f.temp_dht_c, f.hum_aire_pct, f.temp_ntc_c, f.ts_unix};
     Inferencia inf;
     plantaia_inferir(&buf, &m, true, reloj_host_us, &inf);
 

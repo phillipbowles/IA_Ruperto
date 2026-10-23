@@ -34,11 +34,22 @@ Por cada muestra, en orden:
    actual). En warm-up usa lo que haya; en la primera muestra es la luz actual.
 6. `vpd_kpa = 0.6108·exp(17.27·T/(T+237.3))·(1 − HR/100)`, sin recortar HR > 100
    (C tampoco lo recorta: un solo comportamiento que mantener).
+7. **Riego** (`h_desde_riego`): si la sonda de esta muestra es una lectura real
+   (no repetida), la ventana ya tenía 12 muestras antes de esta (fuera de
+   warm-up: el transitorio de la sonda tras un arranque, o volver a meterla en
+   la tierra, no cuenta) y cayó `RIEGO_CAIDA_MV` o más respecto de la última
+   empujada, se guarda la hora de esta muestra como último riego.
+   `h_desde_riego = (ts − riego) / 3600`, con tope `RIEGO_TOPE_H`; sin riego
+   visto (o sin hora) vale el tope. **El último riego sobrevive al reset**: la
+   placa lo guarda en Preferences y lo restaura al arrancar, así que
+   `calcular_features` vacía la ventana en cada tramo pero conserva el riego
+   del mismo dispositivo.
 
 La "1 h" son 12 pasos, no 60 minutos de reloj: dentro de un tramo los pasos
 son de 5 min por construcción. En el dato remuestreado dos bins consecutivos
 están a 5 min o a ≥ 10 min, y los segundos cortan el tramo; no se interpola.
 
+La hora entra como unix epoch en segundos (entero, como `ts_dispositivo_unix`).
 Python calcula en float64; C en float32. Las entradas son mV enteros y T/HR
 con un decimal, así que la diferencia queda muy por debajo de 1e-3.
 """
@@ -50,11 +61,13 @@ import numpy as np
 import pandas as pd
 
 FEATURES = ["suelo_mv", "suelo_delta_1h", "temp_c", "hum_aire_pct", "vpd_kpa",
-            "luz_mv", "luz_media_1h"]
+            "luz_mv", "luz_media_1h", "h_desde_riego"]
 N_FEATURES = len(FEATURES)
 VENTANA = 13          # la actual + 12 anteriores = 1 h a 5 min
 LAG_DELTA = 12
 HUECO_MAX = pd.Timedelta(minutes=7.5)
+RIEGO_CAIDA_MV = 250.0   # caída de la sonda entre dos muestras seguidas que cuenta como riego
+RIEGO_TOPE_H = 96.0      # h_desde_riego sin riego visto (o más viejo que esto)
 
 # Mismos bits que FEAT_MARCA_* de features.h, para que el log de Python y el
 # de la placa se puedan comparar línea a línea.
@@ -85,7 +98,11 @@ class BufferFeatures:
     def __init__(self):
         self.reset()
 
-    def reset(self):
+    def reset(self, conservar_riego: bool = False):
+        """Vacía la ventana. `conservar_riego` = lo que hace la placa al arrancar:
+        restaura el último riego desde Preferences."""
+        riego = self.riego_ts if conservar_riego and hasattr(self, "riego_ts") else 0
+        self.riego_ts = riego
         self.suelo = [0.0] * VENTANA
         self.luz = [0.0] * VENTANA
         self.cabeza = 0
@@ -100,8 +117,8 @@ class BufferFeatures:
     def _atras(self, k: int) -> int:
         return (self.cabeza - 1 - k) % VENTANA
 
-    def empujar(self, suelo, luz, temp_dht, hum, temp_ntc=math.nan):
-        """Devuelve `(x, valido, warmup, marcas)`; `x` es una lista de 7 floats.
+    def empujar(self, suelo, luz, temp_dht, hum, temp_ntc=math.nan, ts_unix: int = 0):
+        """Devuelve `(x, valido, warmup, marcas)`; `x` es una lista de 8 floats.
 
         `temp_ntc` se acepta para que la firma sea la de `MuestraCruda` en C, pero
         no se usa: el termistor no entra a las features (contrato §4).
@@ -119,6 +136,7 @@ class BufferFeatures:
                 marcas |= MARCA_LUZ_REPETIDA
             else:
                 marcas |= MARCA_SIN_LUZ
+        suelo_real = not (marcas & (MARCA_SUELO_REPETIDO | MARCA_SIN_SUELO))
         if marcas & (MARCA_SIN_SUELO | MARCA_SIN_LUZ):
             self.marcas = marcas
             return [math.nan] * N_FEATURES, False, True, marcas
@@ -140,6 +158,16 @@ class BufferFeatures:
         if not self.hay_temp_dht and not self.hay_hum:
             marcas &= ~MARCA_DHT_ANTERIOR
 
+        # Riego: caída brusca de una lectura real respecto de la última empujada,
+        # con la ventana ya llena de 12 anteriores (fuera de warm-up).
+        if (suelo_real and ts_unix > 0 and self.n >= LAG_DELTA
+                and self.suelo[self._atras(0)] - float(suelo) >= RIEGO_CAIDA_MV):
+            self.riego_ts = int(ts_unix)
+        if self.riego_ts > 0 and ts_unix >= self.riego_ts:
+            h_riego = min(RIEGO_TOPE_H, (int(ts_unix) - self.riego_ts) / 3600.0)
+        else:
+            h_riego = RIEGO_TOPE_H
+
         self.suelo[self.cabeza] = float(suelo)
         self.luz[self.cabeza] = float(luz)
         self.cabeza = (self.cabeza + 1) % VENTANA
@@ -157,7 +185,7 @@ class BufferFeatures:
 
         ok = _finito(temp) and _finito(hum_v)
         vpd = float(vpd_kpa(temp, hum_v)) if ok else math.nan
-        x = [float(suelo), delta, temp, hum_v, vpd, float(luz), luz_media]
+        x = [float(suelo), delta, temp, hum_v, vpd, float(luz), luz_media, h_riego]
         return x, ok, warmup, marcas
 
 
@@ -178,6 +206,8 @@ def calcular_features(df: pd.DataFrame, col_ts: str = "ts", col_suelo: str = "su
     `df` tiene una fila cada 5 min con las lecturas *crudas* de ese tick (NaN
     donde faltan). Devuelve un DataFrame con el mismo índice y las columnas
     `FEATURES` (en ese orden) + `warmup`, `valido`, `marcas`, `tramo`.
+    El buffer se vacía en cada tramo pero el último riego se conserva dentro
+    del mismo dispositivo (la placa lo guarda en Preferences).
     """
     tramo = asignar_tramos(df, col_ts)
     orden = df.assign(_tramo=tramo).sort_values(["_tramo", col_ts], kind="stable")
@@ -187,18 +217,20 @@ def calcular_features(df: pd.DataFrame, col_ts: str = "ts", col_suelo: str = "su
     h = orden[col_hum].to_numpy(float)
     ntc = orden[col_ntc].to_numpy(float) if col_ntc and col_ntc in orden else np.full(len(orden), np.nan)
     tr = orden._tramo.to_numpy()
+    disp = orden["dispositivo"].to_numpy() if "dispositivo" in orden else np.zeros(len(orden))
+    ts = (orden[col_ts].astype("int64") // 10**9).to_numpy()
 
     X = np.empty((len(orden), N_FEATURES))
     valido = np.zeros(len(orden), bool)
     warm = np.zeros(len(orden), bool)
     marcas = np.zeros(len(orden), np.uint8)
     buf = BufferFeatures()
-    previo = None
+    previo, disp_previo = None, None
     for i in range(len(orden)):
         if tr[i] != previo:
-            buf.reset()
-            previo = tr[i]
-        X[i], valido[i], warm[i], marcas[i] = buf.empujar(s[i], lz[i], t[i], h[i], ntc[i])
+            buf.reset(conservar_riego=disp[i] == disp_previo)
+            previo, disp_previo = tr[i], disp[i]
+        X[i], valido[i], warm[i], marcas[i] = buf.empujar(s[i], lz[i], t[i], h[i], ntc[i], int(ts[i]))
 
     out = pd.DataFrame(X, index=orden.index, columns=FEATURES)
     out["warmup"] = warm

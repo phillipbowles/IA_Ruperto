@@ -18,7 +18,7 @@
 // Versión del firmware: viaja en cada muestra para poder separar en el análisis
 // los datos tomados antes y después de un cambio de calibración o de lógica.
 // 2.0.0: el semáforo pasa a ser la salida del modelo que corre en la placa.
-#define FW_VERSION "2.0.0"
+#define FW_VERSION "2.1.0"
 
 // ─── Pines (fijo, ver CLAUDE.md — no cambiar) ─────────────────────────────
 #define PIN_LUZ          34
@@ -216,6 +216,8 @@ MuestraCruda muestra_cruda() {
   m.temp_dht_c   = s.dht_ok ? s.temp_dht : NAN;
   m.hum_aire_pct = s.dht_ok ? s.hum_aire : NAN;
   m.temp_ntc_c   = s.ntc_ok ? s.temp_ntc : NAN;   // no entra a las features (contrato §4)
+  // Sin hora NTP no se pueden fechar riegos: h_desde_riego queda en el tope.
+  m.ts_unix      = hora_valida() ? (uint32_t)time(nullptr) : 0;
   return m;
 }
 
@@ -246,6 +248,12 @@ void inferir(bool empujar) {
   MuestraCruda m = muestra_cruda();
   plantaia_inferir(&buf_feat, &m, empujar, reloj_micros, &inf_ult);
   hay_inf = true;
+  // Riego nuevo detectado en la ventana: se guarda para que un reinicio no lo
+  // olvide (h_desde_riego es una feature del modelo).
+  if (empujar && buf_feat.riego_ts != prefs.getUInt("riego_ts", 0)) {
+    prefs.putUInt("riego_ts", buf_feat.riego_ts);
+    Serial.printf("[RIE] riego detectado ts=%lu\n", (unsigned long)buf_feat.riego_ts);
+  }
   actualizar_semaforo();
 
   char linea[200];
@@ -496,7 +504,10 @@ void setup() {
                 plantaia_modelo_version(), FEAT_VENTANA);
 
   // Ventana de features vacía: arranca en warm-up (1 h hasta tener delta).
+  // El último riego sí sobrevive al reinicio (h_desde_riego).
   features_reset(&buf_feat);
+  buf_feat.riego_ts = prefs.getUInt("riego_ts", 0);
+  Serial.printf("ultimo riego ts=%lu\n", (unsigned long)buf_feat.riego_ts);
 
   // Prueba de lámparas: los tres LEDs medio segundo. Después quedan apagados
   // hasta la primera predicción, así "apagado" no se confunde con placa muerta.

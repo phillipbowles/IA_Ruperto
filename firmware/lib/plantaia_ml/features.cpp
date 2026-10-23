@@ -43,6 +43,7 @@ bool features_empujar(BufferFeatures *buf, const MuestraCruda *m,
     if (buf->n > 0) { luz = buf->luz[idx_atras(buf, 0)]; marcas |= FEAT_MARCA_LUZ_REPETIDA; }
     else            { marcas |= FEAT_MARCA_SIN_LUZ; }
   }
+  bool suelo_real = !(marcas & (FEAT_MARCA_SUELO_REPETIDO | FEAT_MARCA_SIN_SUELO));
   if (marcas & (FEAT_MARCA_SIN_SUELO | FEAT_MARCA_SIN_LUZ)) {
     // Primera muestra tras el reset y sin suelo o sin luz: no hay con qué
     // rellenar, así que no entra a la ventana (tampoco se actualiza T/HR, para
@@ -69,6 +70,18 @@ bool features_empujar(BufferFeatures *buf, const MuestraCruda *m,
   float hum = buf->hay_hum ? buf->hum_ult : NAN;
   if (!buf->hay_hum) marcas |= FEAT_MARCA_SIN_HUM;
   if (!buf->hay_temp_dht && !buf->hay_hum) marcas &= ~FEAT_MARCA_DHT_ANTERIOR;  // no hay "anterior"
+
+  // ── Riego: caída brusca de una lectura real, fuera de warm-up ───────────
+  // (antes de empujar: se compara contra la última muestra de la ventana).
+  if (suelo_real && m->ts_unix > 0 && buf->n >= FEAT_LAG_DELTA &&
+      buf->suelo[idx_atras(buf, 0)] - suelo >= FEAT_RIEGO_CAIDA_MV) {
+    buf->riego_ts = m->ts_unix;
+  }
+  float h_riego = FEAT_RIEGO_TOPE_H;
+  if (buf->riego_ts > 0 && m->ts_unix >= buf->riego_ts) {
+    float h = (float)(m->ts_unix - buf->riego_ts) / 3600.0f;   // resta entera: exacta
+    h_riego = h < FEAT_RIEGO_TOPE_H ? h : FEAT_RIEGO_TOPE_H;
+  }
 
   // ── Empujar al buffer circular ──────────────────────────────────────────
   buf->suelo[buf->cabeza] = suelo;
@@ -99,6 +112,7 @@ bool features_empujar(BufferFeatures *buf, const MuestraCruda *m,
   x_out[FEAT_VPD_KPA]        = (valido(temp) && valido(hum)) ? features_vpd_kpa(temp, hum) : NAN;
   x_out[FEAT_LUZ_MV]         = luz;
   x_out[FEAT_LUZ_MEDIA_1H]   = luz_media;
+  x_out[FEAT_H_DESDE_RIEGO]  = h_riego;
 
   return valido(temp) && valido(hum);
 }

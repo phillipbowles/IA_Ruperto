@@ -17,24 +17,40 @@ from plantaia_ml.modelos import (AMBIENTALES, CONFIG_FINAL, SUBCONJUNTOS, candid
 
 
 def test_regla_de_la_restriccion():
-    assert not cumple_restriccion((0,))
-    assert not cumple_restriccion((0, 1))          # delta sale de la sonda: no es ambiental
-    assert not cumple_restriccion((2, 3, 4))       # sin la sonda
-    assert cumple_restriccion((0, 4))
-    assert cumple_restriccion((0, 1, 3))
-    assert not cumple_restriccion((0, 6))          # luz: proxy de la hora del observador
+    assert cumple_restriccion((0,))                  # sólo la sonda: permitido desde el 2026-10-23
+    assert cumple_restriccion((0, 7))                # sonda + horas desde el riego
+    assert not cumple_restriccion((2, 3, 4))         # sin la sonda
+    assert not cumple_restriccion((0, 6))            # luz: proxy de la hora del observador
     assert not cumple_restriccion((0, 4, 5))
     assert set(AMBIENTALES) == {2, 3, 4}
 
 
 def test_todos_los_subconjuntos_y_candidatos_cumplen():
     assert all(cumple_restriccion(v) for v in SUBCONJUNTOS.values())
-    for nombre, (_, grilla) in candidatos().items():
-        assert all(cumple_restriccion(c) for c in grilla["sel__columnas"]), nombre
+    for nombre, (est, grilla) in candidatos().items():
+        subs = grilla.get("sel__columnas", [est.named_steps["sel"].columnas])
+        assert all(cumple_restriccion(c) for c in subs), nombre
 
 
-def test_config_final_usa_ambiental():
+def test_config_final_cumple():
     assert cumple_restriccion(CONFIG_FINAL["params"]["sel__columnas"])
+
+
+def test_regla_sonda_riego():
+    from plantaia_ml.modelos import ReglaSueloRiego
+    rng = np.random.default_rng(0)
+    suelo = np.r_[rng.uniform(1450, 1700, 300), rng.uniform(1750, 1930, 300), rng.uniform(1950, 2000, 100),
+                  rng.uniform(1480, 1530, 60)]
+    riego = np.r_[np.full(700, 96.0), rng.uniform(0, 5, 60)]
+    y = np.r_[np.full(300, 1), np.full(300, 2), np.full(100, 3), np.full(60, 2)]
+    X = np.c_[suelo, riego]
+    m = ReglaSueloRiego().fit(X, y)
+    assert 1700 <= m.t1_ <= 1760 and 1925 <= m.t2_ <= 1955   # cuantiles dentro de los huecos entre clases
+    assert m.h_riego_ is not None and m.h_riego_ >= 5
+    assert (m.predict(X) == y).mean() > 0.99
+    # tree_ coherente con la regla: misma clase recorriendo los nodos
+    assert (m.predict_proba(X).argmax(1) + 1 == m.predict(X)).all()
+    assert m.get_depth() == 3
 
 
 def _tabla(n=4):

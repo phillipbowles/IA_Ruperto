@@ -19,11 +19,18 @@
 #define FEAT_VPD_KPA         4   // kPa, con 2 y 3
 #define FEAT_LUZ_MV          5   // mV, mediana de 9 del LDR
 #define FEAT_LUZ_MEDIA_1H    6   // mV, media de las últimas ≤13 muestras (incluida la actual)
-#define FEAT_N               7
+#define FEAT_H_DESDE_RIEGO   7   // h desde el último riego detectado; FEAT_RIEGO_TOPE_H si no hubo
+#define FEAT_N               8
 
 // Ventana de 1 h a 5 min por muestra: la actual + 12 anteriores.
 #define FEAT_VENTANA        13
 #define FEAT_LAG_DELTA      12   // muestras hacia atrás para suelo_delta_1h
+
+// Riego: la sonda cae FEAT_RIEGO_CAIDA_MV o más entre dos muestras seguidas,
+// con lectura real (no repetida) y fuera de warm-up (el transitorio tras un
+// arranque, o volver a meter la sonda en la tierra, no cuenta).
+#define FEAT_RIEGO_CAIDA_MV  250.0f
+#define FEAT_RIEGO_TOPE_H    96.0f
 
 // Marcas de calidad de la última muestra empujada (bits). Viajan al log como
 // línea [FAL]; el contrato pide que la repetición de un valor quede a la vista.
@@ -44,6 +51,7 @@ struct MuestraCruda {
   float temp_dht_c;     // NAN si el DHT11 no respondió
   float hum_aire_pct;   // NAN si el DHT11 no respondió
   float temp_ntc_c;     // NO entra a las features (contrato §4); queda para el log/POST
+  uint32_t ts_unix;     // hora NTP (unix, s); 0 = sin hora → no se registran riegos
 };
 
 // Estado completo de la ventana. Vive en RAM: un reinicio de la placa lo vacía
@@ -59,12 +67,15 @@ struct BufferFeatures {
   bool     hay_temp_dht;          // hubo alguna vez T válida del DHT
   bool     hay_hum;               // hubo alguna vez HR válida del DHT
   uint8_t  marcas;                // FEAT_MARCA_* de la última muestra
+  uint32_t riego_ts;              // unix del último riego detectado; 0 = ninguno.
+                                  // features_reset lo borra: main.cpp lo restaura
+                                  // de Preferences al arrancar.
 };
 
 // Deja el buffer vacío (equivale a un arranque de la placa).
 void features_reset(BufferFeatures *buf);
 
-// Empuja una muestra al buffer y arma el vector de features en x_out[0..6].
+// Empuja una muestra al buffer y arma el vector de features en x_out[0..7].
 //
 // Devuelve true si el vector quedó completo (se puede inferir). Devuelve false
 // si falta algo que no tiene reemplazo (suelo/luz sin anterior, nunca hubo T o
