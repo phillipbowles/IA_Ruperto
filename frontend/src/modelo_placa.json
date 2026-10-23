@@ -1,128 +1,72 @@
 {
   "_generado": "por ml/plantaia_ml/exportar_c.py — no editar",
-  "version": "arbol-p3-f03-ee3419",
+  "version": "regla-p3-f07-79b556",
   "fecha": "2026-10-23",
-  "tipo": "DecisionTreeClassifier",
+  "tipo": "ReglaSueloRiego",
   "profundidad": 3,
   "features": [
     "suelo_mv",
-    "hum_aire_pct"
+    "h_desde_riego"
   ],
-  "flash_B": 231,
+  "flash_B": 111,
   "nodos": [
     {
-      "feature": "suelo_mv",
-      "umbral": 1743.5,
+      "feature": "h_desde_riego",
+      "umbral": 5.5,
       "si": 1,
-      "no": 8
+      "no": 2
+    },
+    {
+      "clase": "estresada",
+      "proba": [
+        0.07,
+        0.93,
+        0.0
+      ]
     },
     {
       "feature": "suelo_mv",
-      "umbral": 1488.25,
-      "si": 2,
-      "no": 5
-    },
-    {
-      "feature": "suelo_mv",
-      "umbral": 1445.75,
+      "umbral": 1716.0,
       "si": 3,
       "no": 4
     },
     {
-      "clase": "estresada",
-      "proba": [
-        0.044,
-        0.956,
-        0.0
-      ]
-    },
-    {
       "clase": "saludable",
       "proba": [
-        0.425,
-        0.395,
-        0.18
-      ]
-    },
-    {
-      "feature": "suelo_mv",
-      "umbral": 1716.5,
-      "si": 6,
-      "no": 7
-    },
-    {
-      "clase": "saludable",
-      "proba": [
-        0.818,
-        0.083,
-        0.099
-      ]
-    },
-    {
-      "clase": "estresada",
-      "proba": [
-        0.345,
-        0.655,
+        0.982,
+        0.018,
         0.0
       ]
     },
     {
       "feature": "suelo_mv",
-      "umbral": 1936.5,
-      "si": 9,
-      "no": 12
-    },
-    {
-      "feature": "hum_aire_pct",
-      "umbral": 47.75,
-      "si": 10,
-      "no": 11
+      "umbral": 1939.88,
+      "si": 5,
+      "no": 6
     },
     {
       "clase": "estresada",
       "proba": [
-        0.022,
-        0.625,
-        0.353
-      ]
-    },
-    {
-      "clase": "estresada",
-      "proba": [
-        0.011,
-        0.989,
-        0.0
-      ]
-    },
-    {
-      "feature": "hum_aire_pct",
-      "umbral": 43.5,
-      "si": 13,
-      "no": 14
-    },
-    {
-      "clase": "estresada",
-      "proba": [
-        0.0,
-        1.0,
-        0.0
+        0.036,
+        0.883,
+        0.081
       ]
     },
     {
       "clase": "marchita",
       "proba": [
         0.0,
-        0.062,
-        0.938
+        0.232,
+        0.768
       ]
     }
   ],
   "metricas": {
-    "[config. final fija] f1_macro todos, filas fuera de fold juntas (24 ep.)": "0.651",
-    "[config. final fija] exactitud_balanceada todos, filas fuera de fold juntas (24 ep.)": "0.669",
-    "[config. final fija] recall_marchita todos, filas fuera de fold juntas (24 ep.)": "0.590",
-    "[config. final fija] f1_macro sin dudosos, filas fuera de fold juntas (20 ep.)": "0.711",
-    "[config. final fija] exactitud_balanceada sin dudosos, filas fuera de fold juntas (20 ep.)": "0.737",
-    "[config. final fija] recall_marchita sin dudosos, filas fuera de fold juntas (20 ep.)": "0.690"
+    "[config. final fija] f1_macro todos, filas fuera de fold juntas (24 ep.)": "0.795",
+    "[config. final fija] exactitud_balanceada todos, filas fuera de fold juntas (24 ep.)": "0.786",
+    "[config. final fija] recall_marchita todos, filas fuera de fold juntas (24 ep.)": "0.654",
+    "[config. final fija] f1_macro sin dudosos, filas fuera de fold juntas (20 ep.)": "0.858",
+    "[config. final fija] exactitud_balanceada sin dudosos, filas fuera de fold juntas (20 ep.)": "0.860",
+    "[config. final fija] recall_marchita sin dudosos, filas fuera de fold juntas (20 ep.)": "0.765"
   }
 }

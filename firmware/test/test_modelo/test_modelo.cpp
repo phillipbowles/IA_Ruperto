@@ -24,7 +24,7 @@ void setUp(void) {}
 void tearDown(void) {}
 
 void test_api_fija(void) {
-  TEST_ASSERT_EQUAL_INT(7, PLANTAIA_N_FEATURES);
+  TEST_ASSERT_EQUAL_INT(8, PLANTAIA_N_FEATURES);
   TEST_ASSERT_TRUE(strlen(PLANTAIA_MODELO_VERSION) > 0);
   TEST_ASSERT_EQUAL_STRING(PLANTAIA_MODELO_VERSION, plantaia_modelo_version());
 }
@@ -36,11 +36,12 @@ void test_clase_1_a_3_y_probas_suman_1(void) {
   const float deltas[] = {-400, -40, 0, 40, 400};
   const float temps[]  = {5, 15, 22, 30, 40};
   const float hums[]   = {15, 45, 70, 95};
-  const float luces[]  = {140, 900, 2000, 3124};
+  const float luces[]  = {140, 900, 2000};
+  const float riegos[] = {0, 3, 6, 24, 96};
   int n = 0;
   for (float s : suelos) for (float d : deltas) for (float t : temps)
-  for (float h : hums)   for (float l : luces) {
-    float x[PLANTAIA_N_FEATURES] = {s, d, t, h, 0.6108f * expf(17.27f * t / (t + 237.3f)) * (1 - h / 100), l, l * 0.9f};
+  for (float h : hums)   for (float l : luces)  for (float r : riegos) {
+    float x[PLANTAIA_N_FEATURES] = {s, d, t, h, 0.6108f * expf(17.27f * t / (t + 237.3f)) * (1 - h / 100), l, l * 0.9f, r};
     float p[3] = {-1, -1, -1};
     int c = plantaia_predecir(x, p);
     TEST_ASSERT_TRUE(c >= 1 && c <= 3);
@@ -96,7 +97,7 @@ void test_linea_inf_formato(void) {
   plantaia_linea_inf(&inf, "[INF]", linea, sizeof(linea));
   char esperado[160];
   snprintf(esperado, sizeof(esperado),
-           "[INF] n=1 warmup=1 x=[1532,0,20.6,47,1.29,871,871] -> %s p=[%.2f,%.2f,%.2f] t_us=37",
+           "[INF] n=1 warmup=1 x=[1532,0,20.6,47,1.29,871,871,96.0] -> %s p=[%.2f,%.2f,%.2f] t_us=37",
            plantaia_etiqueta(inf.clase), (double)inf.proba[0], (double)inf.proba[1], (double)inf.proba[2]);
   TEST_ASSERT_EQUAL_STRING(esperado, linea);
 }

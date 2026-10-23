@@ -83,11 +83,12 @@ costo). Los resultados y el modelo elegido están en el propio notebook y en
   no las filas.
 - **Baselines**: clase mayoritaria, un umbral único y dos umbrales sobre
   `suelo_mv`.
-- **Candidatos**: regresión logística, árbol de decisión, Random Forest chico,
-  Naive Bayes gaussiano, k-NN, SVM RBF y MLP chico.
+- **Candidatos**: la regla sonda + riego (dos umbrales sobre `suelo_mv` +
+  `h_desde_riego`), regresión logística, árbol de decisión, Random Forest chico,
+  Naive Bayes gaussiano, k-NN, SVM RBF y MLP chico. Se entrenan sin los
+  episodios dudosos.
 - **Métricas**: exactitud balanceada, F1 macro, recall de `marchita`, matriz de
-  confusión y ROC-AUC OvR cuando hay probabilidades, más la versión binaria
-  *requiere cuidado* como análisis secundario.
+  confusión y ROC-AUC OvR cuando hay probabilidades.
 - **Costo en la ESP32**: flash, RAM, operaciones por predicción y si se puede
   exportar sin librerías. La selección sigue el criterio de §5.3 (flash
   < 32 KB, sin memoria dinámica, < 1 ms por inferencia).

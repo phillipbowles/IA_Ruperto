@@ -14,7 +14,7 @@ Python: `/opt/anaconda3/bin/python`, con las versiones fijadas en
 |---|---|
 | `__init__.py` | Rutas del repo (`RAIZ`, `DATOS`, `FIGURAS`), clases y códigos del firmware, `SNAPSHOT_VIGENTE`, `MACETA` y `ALIAS_MACETA` (el identificador viejo con el que quedaron en la base las filas del 03/10 al 18/10) |
 | `datos_reales.py` | Carga y limpieza de los snapshots crudos de Railway (§3.1): hora (`ts_dispositivo` o `ts_servidor`), episodio por fila desde `episodios.csv`, remuestreo a 5 min por `boot_id`, marcas `post_boot` / `suelo_saturado` / `dudoso` |
-| `features.py` | Las 7 features del contrato §4 con la misma semántica que el buffer circular de la placa (tramos, faltantes, warm-up). Gemelo de `features.{h,cpp}` |
+| `features.py` | Las 8 features del contrato §4 (incluida `h_desde_riego`, con el riego que sobrevive a los reinicios) con la misma semántica que el buffer circular de la placa (tramos, faltantes, warm-up). Gemelo de `features.{h,cpp}` |
 | `dataset.py` | `serie_maceta01()`: la tabla de modelado a 5 min (features + clase + `episodio_id`), armada sólo con lo que midió la placa |
 | `modelos.py` | Candidatos, partición por episodio (`StratifiedGroupKFold`) con búsqueda anidada, estimación de costo en la ESP32 y `CONFIG_FINAL`, el modelo que va a la placa |
 | `exportar_c.py` | Reentrena `CONFIG_FINAL` y escribe el header C, los vectores de paridad (ver abajo) y `frontend/src/modelo_placa.json` (versión y nodos del árbol, que dibuja el dashboard) |
@@ -56,25 +56,24 @@ placa** (`maceta-01`); el N efectivo son los episodios, no las filas.
 Cómo se llega a `CONFIG_FINAL` (`modelos.py`, ejecutado en
 `notebooks/03_modelos.ipynb` §5):
 
-- **Restricción de diseño**: todo candidato con selección de features usa
-  `suelo_mv` + al menos una ambiental del aire (`AMBIENTALES`: `temp_c`,
-  `hum_aire_pct`, `vpd_kpa`). `suelo_delta_1h` puede sumarse pero no cuenta, y
-  la luz (`luz_mv`, `luz_media_1h`) no entra (`cumple_restriccion`).
-- **Compuerta de influencia**: la ambiental tiene que cambiar la clase de
-  ≥ `MIN_CAMBIO_PCT` (1 %) de las filas si se la lleva a su mediana.
-- **Condición de seguridad**: recall de marchita ≥ `MIN_RECALL_MARCHITA` (0,9)
-  sin dudosos y el ep. 12 con ≥ `MIN_ACIERTO_EP12` (50 %) de sus filas bien,
-  sobre la grilla de `configuraciones_seguridad`. **Hoy no la cumple ninguna
-  configuración**, así que queda la del criterio de §5.3: `CONFIG_FINAL` es
-  un **árbol de decisión de profundidad 2** (`min_samples_leaf=100`, features
-  `suelo_mv` + `suelo_delta_1h` + `temp_c`).
+- **Se entrena sin los episodios dudosos** (`EPISODIOS_DUDOSOS`) y se evalúa
+  con y sin ellos.
+- **Features**: todo candidato usa `suelo_mv` y ninguno la luz
+  (`cumple_restriccion`). Desde el 2026-10-23 no se exige una variable del aire.
+- **Candidato propio**: `ReglaSueloRiego`, dos umbrales sobre `suelo_mv` +
+  "estresada si `h_desde_riego` ≤ H". Expone `tree_` como un árbol de sklearn,
+  así el exportador la escribe como árbol (tipo `regla`).
+- **Criterio** (§5.3): flash < 32 KB y < 1 ms; F1 macro sin dudosos dentro de
+  1 desvío bootstrap del mejor; desempate por interpretabilidad. Hoy gana la
+  regla: `CONFIG_FINAL` es `regla-p3-f07-79b556`. La condición de seguridad
+  (recall de marchita ≥ 0,9 y el ep. 12 bien) se reporta y no se cumple.
 
 `matriz_X(df)` arma la entrada descartando explícitamente las columnas de
 etiqueta y procedencia (`etiqueta_origen`, `dudoso`, `episodio_id`, …). El
-exportador sabe escribir árbol, RF, regresión logística y Naive Bayes
-gaussiano. La versión es `tipo-f<features>-<hash>`, con un hash del C
+exportador sabe escribir árbol (y la regla), RF, regresión logística y Naive
+Bayes gaussiano. La versión es `tipo-f<features>-<hash>`, con un hash del C
 generado: cambia si cambian los datos de entrenamiento (por ejemplo, un
 snapshot nuevo de Railway).
 
 El exportador entrena con la serie completa de `serie_maceta01()` sobre el
-snapshot vigente (`SNAPSHOT_VIGENTE`).
+snapshot vigente (`SNAPSHOT_VIGENTE`), sin los episodios dudosos.

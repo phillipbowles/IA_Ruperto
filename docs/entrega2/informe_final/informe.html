@@ -1,0 +1,157 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>PlantaIa — Tarea 2</title><style>
+@page { size: A4; margin: 15mm 16mm 14mm 16mm; }
+* { box-sizing: border-box; }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 9.3pt; line-height: 1.32;
+       color: #1d1d1f; margin: 0; }
+h2 { font-size: 11pt; margin: 9px 0 3px; color: #1f3d6b; }
+p { margin: 0 0 5px; text-align: justify; hyphens: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 8.2pt; margin: 3px 0 4px; }
+th, td { border-bottom: 1px solid #d8dbe0; padding: 1.6px 5px; text-align: left; }
+th { background: #eef2f7; font-weight: 600; }
+td:nth-child(n+2), th:nth-child(n+2) { text-align: center; }
+pre { background: #f5f6f8; border: 1px solid #e1e4e8; border-radius: 4px; padding: 4px 7px; margin: 3px 0 5px;
+      font-size: 7.3pt; line-height: 1.28; white-space: pre-wrap; word-break: break-all; }
+code { font-family: Menlo, Consolas, monospace; font-size: 0.92em; }
+figure { margin: 4px auto 6px; text-align: center; break-inside: avoid; }
+figure img { display: block; margin: 0 auto; }
+figcaption { font-size: 7.8pt; color: #444; margin-top: 2px; text-align: justify; }
+.cuadro { font-size: 8pt; color: #444; margin: 5px 0 1px; }
+.caratula { height: 262mm; display: flex; flex-direction: column; justify-content: center; text-align: center;
+            break-after: page; }
+.caratula .u { font-size: 13pt; color: #1f3d6b; letter-spacing: .02em; }
+.caratula .c { font-size: 12pt; margin-top: 30mm; }
+.caratula .t { font-size: 22pt; font-weight: 600; margin: 14mm 10mm 6mm; color: #1f3d6b; }
+.caratula .p { font-size: 13pt; }
+.caratula .i { font-size: 11.5pt; margin-top: 30mm; }
+.caratula .f { font-size: 10.5pt; margin-top: 8mm; color: #555; }
+.pendiente { background: #fff4d6; border: 1px dashed #c98500; padding: 4px 6px; font-size: 8.5pt; }
+</style></head><body><section class="caratula">
+  <div class="u">Universidad de Montevideo — Facultad de Ingeniería</div>
+  <div class="c">Curso de Inteligencia Artificial · Tarea 2</div>
+  <div class="p" style="margin-top:6mm">Proyecto: Maceta Inteligente</div>
+  <div class="t">Clasificador del estado de un lirio de paz en la ESP32</div>
+  <div class="i">Manuel Pérez, Guillermo Storace y Phillip Bowles</div>
+  <div class="f">Octubre de 2026</div>
+</section><main><h2>1. Objetivo y sistema</h2>
+<p>Una ESP32 mide cada 5 minutos un lirio de paz con una sonda resistiva de humedad del sustrato, un DHT11 (temperatura y humedad del aire) y un LDR (luz), y publica cada muestra en un backend propio (Postgres en Railway). Con esos datos se entrenó un clasificador de tres clases que corre <strong>en la placa</strong>: 1 <code>saludable</code> (turgente, LED verde), 2 <code>estresada</code> (marchitez transitoria, amarillo) y 3 <code>marchita</code> (marchitez franca, rojo). Cada 5 minutos la placa lee, arma las features, predice y prende el LED; la inferencia no depende del WiFi.</p>
+<h2>2. Datos y preparación</h2>
+<p>Se usó el dataset de la Tarea 1 en su versión del 23/10: 21.850 filas de una sola maceta, del 12/09 al 22/10. Cada vez que alguien observa la planta registra la clase con un botón; las muestras siguientes heredan esa etiqueta hasta la próxima observación y forman un <strong>episodio</strong>. Preparación: hora NTP de la placa, remuestreo a 5 minutos con la mediana (parte de la serie llegó cada 30 s), descarte de la primera hora tras cada arranque (transitorio de la sonda), de la sonda saturada y de las filas sin episodio. Los huecos no se interpolan. Quedan <strong>5.663 filas en 24 episodios</strong> (7 <code>saludable</code>, 11 <code>estresada</code>, 6 <code>marchita</code>). Cuatro episodios son <strong>dudosos</strong> (la etiqueta contradice a la sonda o se heredó sin que nadie mirara la planta): se excluyen del entrenamiento y las métricas se reportan con y sin ellos.</p>
+<figure><img src="figuras/serie_modelado.png" style="width:100%"><figcaption><b>Figura 1.</b> Serie de modelado. Arriba, la sonda (más mV = más seco) coloreada por clase con el número de episodio, y los riegos detectados (líneas azules); abajo, temperatura y humedad del aire. Entre el 03/10 y el 18/10 hay tres ciclos completos: se seca, <code>estresada</code>, <code>marchita</code>, riego, unas horas de <code>estresada</code> con el sustrato ya mojado y vuelta a <code>saludable</code>.</figcaption></figure>
+
+<p><strong>Features</strong> (mismo código en Python y C++, con test de paridad): con la lectura actual y un buffer de 13 muestras (1 h) se arman <code>suelo_mv</code>, <code>suelo_delta_1h</code>, <code>temp_c</code>, <code>hum_aire_pct</code>, <code>vpd_kpa</code>, <code>luz_mv</code>, <code>luz_media_1h</code> y <strong><code>h_desde_riego</code></strong>: horas desde el último riego, que la placa detecta como una caída de la sonda de 250 mV o más entre dos muestras (fuera de la primera hora tras un arranque) y guarda en memoria no volátil. La luz no entra a ningún modelo: todas las marchitas de septiembre se observaron de noche y el modelo aprendía "oscuro → marchita". El target son los códigos 1–3 del firmware; las columnas que delatan la etiqueta (origen, episodio, hora) se descartan antes de entrenar.</p>
+<h2>3. Evaluación y comparación de modelos</h2>
+<p>Las muestras contiguas comparten etiqueta y son casi iguales: un Random Forest da 0,99 de exactitud balanceada con un split aleatorio y 0,75 separando episodios. Por eso se usó <strong><code>StratifiedGroupKFold</code> (5 folds) por episodio</strong>, búsqueda de hiperparámetros anidada también por episodio, métricas sobre las predicciones fuera de fold juntas y desvío por <strong>bootstrap de episodios</strong>. Cada candidato elige su subconjunto de features (siempre con la sonda, nunca con la luz).</p>
+<p class="cuadro"><b>Cuadro 1:</b> Fuera de fold, 20 episodios sin dudosos. Costo estimado en la ESP32 (240 MHz).</p>
+
+<table>
+<thead>
+<tr>
+<th>Modelo</th>
+<th>F1 macro</th>
+<th>Exact. bal.</th>
+<th>Recall marchita</th>
+<th>Flash / µs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Regla sonda + riego</strong></td>
+<td><strong>0,858 ± 0,049</strong></td>
+<td><strong>0,860</strong></td>
+<td>0,77</td>
+<td>111 B / 0,3</td>
+</tr>
+<tr>
+<td>Dos umbrales sobre la sonda (baseline)</td>
+<td>0,833 ± 0,057</td>
+<td>0,834</td>
+<td>0,77</td>
+<td>8 B / 0,1</td>
+</tr>
+<tr>
+<td>Árbol de decisión</td>
+<td>0,801 ± 0,055</td>
+<td>0,815</td>
+<td>0,74</td>
+<td>111 B / 0,2</td>
+</tr>
+<tr>
+<td>Regresión logística</td>
+<td>0,791 ± 0,057</td>
+<td>0,827</td>
+<td><strong>0,85</strong></td>
+<td>52 B / 4</td>
+</tr>
+<tr>
+<td>Random Forest (30 árboles)</td>
+<td>0,758 ± 0,075</td>
+<td>0,753</td>
+<td>0,56</td>
+<td>6,1 KB / 11</td>
+</tr>
+<tr>
+<td>k-NN</td>
+<td>0,744 ± 0,058</td>
+<td>0,734</td>
+<td>0,49</td>
+<td>66 KB / 2.370</td>
+</tr>
+<tr>
+<td>SVM RBF</td>
+<td>0,731 ± 0,077</td>
+<td>0,756</td>
+<td>0,66</td>
+<td>12,5 KB / 981</td>
+</tr>
+<tr>
+<td>MLP</td>
+<td>0,672 ± 0,079</td>
+<td>0,663</td>
+<td>0,30</td>
+<td>1,1 KB / 26</td>
+</tr>
+<tr>
+<td>Naive Bayes</td>
+<td>0,564 ± 0,090</td>
+<td>0,561</td>
+<td>0,14</td>
+<td>60 B / 4</td>
+</tr>
+<tr>
+<td>Clase mayoritaria (baseline)</td>
+<td>0,188 ± 0,089</td>
+<td>0,203</td>
+<td>0,00</td>
+<td>4 B / 0</td>
+</tr>
+</tbody>
+</table>
+<figure><img src="figuras/rendimiento_vs_costo.png" style="width:80%"><figcaption><b>Figura 2.</b> F1 macro fuera de fold (± desvío bootstrap por episodio) contra la flash estimada, en escala logarítmica. Gris = baselines, rojo = modelo elegido, franja = un desvío del mejor, línea punteada = límite de 32 KB.</figcaption></figure>
+
+<p>Los modelos flexibles (RF, k-NN, SVM, MLP) rinden menos que las reglas simples: con 20 episodios no hay de dónde aprender más. Las variables del aire casi no aportan: en octubre el aire se movió entre 18 y 21 °C y entre 42 y 57 % de humedad. En un mismo árbol, la sonda sola da 0,71 y sumarle la humedad del aire, 0,77; ese aporte sale del radiador de septiembre.</p>
+<h2>4. Modelo elegido y su lógica en la ESP32</h2>
+<p>Criterio, fijado antes de comparar: (1) menos de 32 KB de flash, menos de 1 ms por predicción y sin memoria dinámica (queda afuera el k-NN); (2) F1 macro dentro de un desvío del mejor (piso 0,809); (3) desempate por interpretabilidad. <strong>Sólo la regla sonda + riego pasa el piso</strong>: le gana a la regla de dos umbrales en el 98 % de las remuestras y al árbol en el 99 %. Fuera de fold, con todos los episodios, da F1 macro 0,795 y ROC-AUC 0,83.</p>
+<figure><img src="figuras/modelo_final.png" style="width:100%"><figcaption><b>Figura 3.</b> Izquierda: la regla en el plano (sonda, horas desde el riego), con las filas medidas encima; las recuperaciones post-riego quedan en la franja amarilla de abajo. Derecha: matriz de confusión fuera de fold (20 episodios sin dudosos): ninguna <code>saludable</code> se predice <code>marchita</code> ni al revés.</figcaption></figure>
+
+<p>Pseudocódigo de <code>plantaia_predecir</code> (<code>regla-p3-f07-79b556</code>, exportado a tablas <code>static const</code> en <code>modelo_plantaia.h</code>, 111 B, a lo sumo 3 comparaciones):</p>
+<pre><code class="language-c">// cada 5 min: x[8] = features(buffer de 13 muestras, hora NTP, último riego)
+if (x[H_DESDE_RIEGO] &lt;= 5.5f)  return ESTRESADA;   // LED amarillo: se está recuperando
+if (x[SUELO_MV]      &lt;= 1716f) return SALUDABLE;   // LED verde
+if (x[SUELO_MV]      &lt;= 1940f) return ESTRESADA;   // LED amarillo
+return MARCHITA;                                    // LED rojo: hay que regar
+</code></pre>
+<h2>5. Implementación y pruebas</h2>
+<p>Un script reentrena el modelo elegido y genera el header C y los vectores de prueba. El firmware 2.1.0 hace, cada 5 minutos: leer los sensores (mediana de 9), empujar la muestra al buffer circular, detectar el riego, armar el vector de 8 features, predecir, prender el LED y mandar clase, probabilidades y versión del modelo en el POST. Si nunca respondió el DHT11 no se predice y los LEDs quedan apagados. Los 23 tests de host pasan: paridad Python↔C del 100 % en 336 vectores del modelo (incluidos los puntos pegados a cada umbral) y en 190 muestras de features con reinicios, huecos, faltantes y un riego real.</p>
+<p>Log del replay en host con el mismo código de la placa, sobre el 19/10 (la sonda cae 418 mV en el riego de las 22:40 y la clase pasa a <code>saludable</code> a las 5,6 h):</p>
+<pre><code>[INF] n=104 warmup=0 x=[1934,-2,20.2,53,1.11,1777,1418,96.0] -&gt; estresada p=[0.04,0.88,0.08] t_us=0
+[INF] n=105 warmup=0 x=[1516,-420,20.6,53,1.14,1792,1522,0.0] -&gt; estresada p=[0.07,0.93,0.00] t_us=0
+[INF] n=171 warmup=0 x=[1438,-9,20.2,49,1.21,142,142,5.5] -&gt; estresada p=[0.07,0.93,0.00] t_us=0
+[INF] n=172 warmup=0 x=[1438,-8,20.2,49,1.21,142,142,5.6] -&gt; saludable p=[0.98,0.02,0.00] t_us=0
+</code></pre>
+<p class="pendiente">LOG DE LA PLACA — se completa al flashear el firmware 2.1.0</p>
+
+<h2>6. Discusión y conclusión</h2>
+<p><strong>Ventajas.</strong> El modelo se lee entero en cuatro líneas, usa la sonda y una variable temporal que la placa calcula con un contador, ocupa 111 B y predice en microsegundos. La predicción casi no depende de la hora del día (V de Cramér 0,13). Sobre 272 muestras sin etiqueta del 21–22/10 dio <code>saludable</code> el 100 % del tiempo.</p>
+<p><strong>Memoria y CPU.</strong> El firmware usa el 73,5 % de la flash (962 KB de 1,31 MB) y el 14,6 % de la RAM. El límite de esta entrega fueron los datos, no el hardware: hasta el Random Forest entraba.</p>
+<p><strong>Limitaciones.</strong> (1) El corte de 5,5 h puede ser el horario del observador: en los tres ciclos la observación <code>saludable</code> llegó 5–6 h después del riego. (2) Hay 3 recuperaciones observadas y 13 de los 24 episodios son de las mismas dos semanas. (3) La sonda resistiva deriva por corrosión (la marchita pasó de ~2830 a ~1950 mV entre septiembre y octubre), así que los cortes valen para la escala actual. (4) No reconoce la marchita nocturna del 19/10 (1758 mV). (5) Varias decisiones (la feature de riego, entrenar sin dudosos, no exigir variables del aire) se tomaron mirando resultados, así que las métricas son algo optimistas.</p>
+<p><strong>Mejoras.</strong> Observar recuperaciones a horarios distintos, con fotos de la ESP32-CAM; calibrar la sonda cada semana o pasar a una capacitiva; y guardar las predicciones en el backend para evaluar el modelo en línea con observaciones nuevas.</p></main></body></html>

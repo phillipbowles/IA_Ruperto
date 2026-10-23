@@ -28,9 +28,28 @@ def _serie(n, suelo=None, luz=None, temp=20.0, hum=50.0, boot=1, inicio="2026-10
 
 def test_orden_de_columnas():
     assert FEATURES == ["suelo_mv", "suelo_delta_1h", "temp_c", "hum_aire_pct",
-                        "vpd_kpa", "luz_mv", "luz_media_1h"]
+                        "vpd_kpa", "luz_mv", "luz_media_1h", "h_desde_riego"]
     f = calcular_features(_serie(3))
-    assert list(f.columns[:7]) == FEATURES
+    assert list(f.columns[:8]) == FEATURES
+
+
+def test_riego_detectado_y_conservado_entre_reinicios():
+    suelo = np.r_[np.full(14, 1950.0), np.full(10, 1520.0)]   # cae 430 mV en la muestra 14
+    d = _serie(24, suelo=suelo)
+    f = calcular_features(d)
+    assert (f.h_desde_riego.iloc[:14] == 96.0).all()           # sin riego visto: el tope
+    assert f.h_desde_riego.iloc[14] == 0.0
+    assert math.isclose(f.h_desde_riego.iloc[20], 0.5)          # 6 muestras = 30 min
+    # Un reinicio vacía la ventana pero el riego sigue (Preferences en la placa).
+    d2 = _serie(3, inicio=d.ts.iloc[-1] + pd.Timedelta(hours=2), boot=2, suelo=np.full(3, 1520.0))
+    f2 = calcular_features(pd.concat([d, d2], ignore_index=True))
+    assert math.isclose(f2.h_desde_riego.iloc[24], (9 * 5 + 2 * 60) / 60)   # riego a los 70 min, reinicio a los 235
+
+
+def test_riego_no_cuenta_en_warmup():
+    # Sonda recién metida tras un arranque: cae 800 mV en la 3.ª muestra → no es riego.
+    f = calcular_features(_serie(5, suelo=np.array([2700.0, 2650, 1850, 1850, 1850])))
+    assert (f.h_desde_riego == 96.0).all()
 
 
 def test_warmup_y_delta_en_rampa():

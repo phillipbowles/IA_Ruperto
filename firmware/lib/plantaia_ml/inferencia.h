@@ -40,7 +40,7 @@ const char *plantaia_etiqueta(int clase);
 const char *plantaia_modelo_version(void);
 
 // Línea de log parseable, sin '\n'. Con inf->ok:
-//   [INF] n=123 warmup=0 x=[1532,-41,20.6,47,1.29,871,850] -> estresada p=[0.10,0.78,0.12] t_us=37
+//   [INF] n=123 warmup=0 x=[1532,-41,20.6,47,1.29,871,850,96.0] -> estresada p=[0.10,0.78,0.12] t_us=37
 // Sin inferencia (inf->ok == false):
 //   [INF] n=0 warmup=1 x=[nan,...] -> sin_prediccion p=[] t_us=0
 // `tag` reemplaza "[INF]" (el envío forzado usa "[CON]"). Devuelve lo que

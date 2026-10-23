@@ -51,6 +51,7 @@ pio run                      # compilar (sólo esp32dev, por default_envs)
 pio run -t upload            # subir
 pio device monitor           # 115200
 pio test -e native           # tests del host: features, modelo, replay
+tools/flashear_y_registrar.sh  # subir + 16 min de log a docs/entrega2/logs/
 ```
 
 El puerto se autodetecta; si hay más de una placa, fijarlo en `platformio.ini`.
@@ -161,6 +162,10 @@ la placa lee → arma las features → predice → prende el LED → POST con
   `ml/plantaia_ml/features.py` y en `firmware/lib/plantaia_ml/features.{h,cpp}`;
   si se toca uno, se toca el otro en el mismo commit. La **paridad Python↔C**
   (features y clase predicha) la exige `pio test -e native`.
+- La feature `h_desde_riego` (horas desde el último riego, detectado como una
+  caída de la sonda ≥ 250 mV) necesita la hora NTP y guarda el riego en
+  Preferences (`riego_ts`): un reinicio no lo olvida. Se entrena **sin los
+  episodios dudosos** (`EPISODIOS_DUDOSOS`).
 - `firmware/lib/plantaia_ml/modelo_plantaia.h` es **GENERADO**: no se edita a
   mano. Se regenera (junto con los vectores de paridad de `firmware/test/` y
   `frontend/src/modelo_placa.json`, el árbol que dibuja el dashboard) con

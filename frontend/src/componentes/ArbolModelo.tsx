@@ -202,7 +202,8 @@ export function ArbolModelo({ valores, prediccion, modeloVersion }: {
 
   return (
     <div className="arbol">
-      <svg viewBox={`0 0 ${ancho} ${alto}`} role="img"
+      {/* Sin tope, un árbol angosto (pocas hojas) se estiraría al ancho del panel. */}
+      <svg viewBox={`0 0 ${ancho} ${alto}`} role="img" style={{ maxWidth: Math.round(ancho * 1.25) }}
            aria-label={claseFinal ? `La medición actual cae en la hoja ${NOMBRE[claseFinal]}` : "Árbol de decisión de la placa"}>
         {NODOS.map((n, i) => esHoja(n) ? null : (
           <g key={`r${i}`}>

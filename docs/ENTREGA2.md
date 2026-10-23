@@ -26,7 +26,7 @@ suma el tramo del 03/10 al 18/10 (§1.1).
 | Actuador físico | Semáforo LED = predicción del modelo | GPIO 25/26/27 |
 | Documentar la lógica en el micro | | `firmware/lib/plantaia_ml/README.md` |
 | Discusión (ventajas, límites, memoria/CPU, mejoras) | | informe + notebook §7 |
-| Informe PDF ≤ 3 páginas | Fuente con marcas de figuras + figuras | `docs/entrega2/informe_v2/` (versión vigente); `docs/entrega2/informe/` (anterior) |
+| Informe PDF ≤ 3 páginas | Fuente con marcas de figuras, figuras y PDF con carátula | `docs/entrega2/informe_final/` (las versiones anteriores, en `docs/entrega2/historico/`) |
 | Logs de inferencia en tiempo real | Replay en host + log de la placa del 22/10 (modelo anterior) | `docs/entrega2/logs/replay_host.txt`, `docs/entrega2/logs/placa_2026-10-22*.txt` |
 
 ---
@@ -153,6 +153,7 @@ garantiza.
 | 4 | `vpd_kpa` | `0.6108·exp(17.27·T/(T+237.3))·(1 − HR/100)` con 2 y 3 | kPa |
 | 5 | `luz_mv` | mediana de 9 del LDR | mV |
 | 6 | `luz_media_1h` | media de `luz_mv` en las muestras de la última hora (incluida la actual) | mV |
+| 7 | `h_desde_riego` | horas desde el último riego detectado; 96 (tope) si no hubo o es más viejo | h |
 
 Reglas:
 
@@ -171,6 +172,14 @@ Reglas:
   sueltas del DHT se cubren con el último valor válido.
 - *Warm-up*: hasta tener 1 h de historia, `suelo_delta_1h = 0` y la media de luz
   usa lo que haya. La inferencia corre igual pero el log lleva `warmup=1`.
+- **Riego** (`h_desde_riego`, agregado el 2026-10-23): si la sonda de la
+  muestra es una lectura real (no repetida), la ventana ya tenía 12 muestras
+  antes (fuera de warm-up: el transitorio tras un arranque o volver a meter la
+  sonda no cuentan) y cayó ≥ 250 mV respecto de la última empujada, se guarda
+  la hora NTP de la muestra como último riego. La placa lo persiste en
+  Preferences (`riego_ts`) y lo restaura al arrancar; sin hora NTP no se
+  registran riegos. Python simula lo mismo: vacía la ventana en cada tramo
+  pero conserva el riego.
 - Si `suelo_mv` o `luz_mv` faltan en una muestra, se repite la anterior en el
   buffer y se marca en el log. **La sonda saturada (`suelo_raw` 0 o 4095)
   cuenta como faltante**. La luz saturada no: es luz fuerte (u oscuridad
@@ -187,7 +196,9 @@ Reglas:
   están las tres clases, así que las métricas se calculan **una vez
   sobre las predicciones fuera de fold juntas**, con el desvío de un
   **bootstrap por episodio** (no media ± desvío por fold).
-- Las métricas se reportan con y sin los episodios dudosos (8, 9, 11, 14).
+- **Se entrena sin los episodios dudosos** (8, 9, 11, 14) y las métricas se
+  reportan con y sin ellos (decisión del 2026-10-23: con ellos en el train el
+  modelo aprendía sus etiquetas).
 - Baselines obligatorios: clase mayoritaria y un umbral único sobre `suelo_mv`
   (el notebook suma dos umbrales sobre `suelo_mv`, el rival honesto).
 - Métricas: exactitud balanceada, F1 macro, recall de `marchita` (el error caro
@@ -195,9 +206,13 @@ Reglas:
 
 ### 5.2 Candidatos
 
-Regresión logística, árbol de decisión (profundidad ≤ 8), Random Forest chico
-(≤ 30 árboles, profundidad ≤ 8), Naive Bayes gaussiano, k-NN, SVM RBF, MLP
-chico. Hiperparámetros con búsqueda interna también por grupos.
+**Regla sonda + riego** (dos umbrales sobre `suelo_mv` + "estresada si pasaron
+≤ H horas desde un riego", agregada el 2026-10-23), regresión logística, árbol
+de decisión (profundidad ≤ 6), Random Forest chico (30 árboles, profundidad ≤
+8), Naive Bayes gaussiano, k-NN, SVM RBF, MLP chico. Hiperparámetros con
+búsqueda interna también por grupos. Cada candidato elige su subconjunto de
+features: **siempre con `suelo_mv`, nunca con luz** (hasta el 2026-10-23 se
+exigía además una variable del aire; se sacó porque no aportaba).
 
 Para cada uno, además de las métricas: **flash estimada** (bytes de
 parámetros/código C), RAM en inferencia, operaciones por predicción y si es
@@ -216,7 +231,7 @@ salvo que el número diga otra cosa.
 - API C fija:
 
   ```c
-  #define PLANTAIA_N_FEATURES 7
+  #define PLANTAIA_N_FEATURES 8
   #define PLANTAIA_MODELO_VERSION "..."
   // Devuelve el código de clase 1..3; si proba != NULL escribe proba[0..2]
   // en el orden saludable, estresada, marchita.
@@ -228,10 +243,10 @@ salvo que el número diga otra cosa.
   de coincidencia de clase. Idem para features: una secuencia cruda pasada por
   el buffer en C tiene que dar los mismos vectores que `features.py`.
 
-### 5.4 Firmware 2.0.0
+### 5.4 Firmware 2.1.0
 
-- `FW_VERSION "2.0.0"`, cadencia 5 min (ya está en el código; **hay que
-  flashear**).
+- `FW_VERSION "2.1.0"` (2.0.0 + `h_desde_riego` con el riego persistido en
+  Preferences), cadencia 5 min.
 - En cada tick de 5 min: leer → empujar al buffer → features → predecir →
   medir `micros()` → **LEDs según la predicción** → LCD → log → POST.
   La inferencia no depende del WiFi.
@@ -239,12 +254,13 @@ salvo que el número diga otra cosa.
   maneja el semáforo: el semáforo es la salida del modelo. La pulsación
   larga sigue forzando un envío.
 - Log por Serial, una línea parseable por inferencia:
-  `[INF] n=123 warmup=0 x=[1532,-41,20.6,47,1.29,871,850] -> estresada p=[0.10,0.78,0.12] t_us=37`
+  `[INF] n=123 warmup=0 x=[1532,-41,20.6,47,1.29,871,850,96.0] -> estresada p=[0.10,0.78,0.12] t_us=37`
+  y `[RIE] riego detectado ts=…` cuando detecta un riego.
 - Payload: se agregan `prediccion_codigo`, `prediccion_etiqueta`,
   `prediccion_proba`, `modelo_version`.
 - Lógica sin Arduino en `firmware/lib/plantaia_ml/` para poder testearla en el
   host con `[env:native]`.
-- **Replay en host**: un test nativo pasa un tramo real (19/10, 150 muestras)
+- **Replay en host**: un test nativo pasa un tramo real (19/10, 200 muestras, cruza un riego)
   por el mismo código y deja el log en `docs/entrega2/logs/replay_host.txt`.
 
 ---
@@ -273,9 +289,10 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
 | I1 | `pio test -e native` y `pio run` en verde con el modelo real | integración | ✅ |
 | D1 | Informe ≤ 3 págs. en PDF + figuras + logs | informe | fuera del repo |
 | D2 | Actualizar CLAUDE.md, ARQUITECTURA.md §7, READMEs | integración | ✅ |
-| M1 | Flashear la placa y capturar el log real de inferencia | **Manuel** | hecho el 22/10 con `arbol-p2-f012-58e644` (`t_us=33` en la ESP32); **falta reflashear con `arbol-p3-f03-ee3419`** |
+| M1 | Flashear la placa y capturar el log real de inferencia | **Manuel** + agente | hecho el 22/10 con `arbol-p2-f012-58e644` (`t_us=33` en la ESP32); **falta flashear el firmware 2.1.0 con `regla-p3-f07-79b556`** (`firmware/tools/flashear_y_registrar.sh`) |
 | A5 | Episodios 16–28 (03/10 → 18/10) + unificar las filas con identificador `maceta-02` | datos | ✅ (2026-10-23) |
 | B4 | Re-ejecutar el notebook 03, re-exportar, informe v2 | modelos/informe | ✅ (2026-10-23) |
+| B5 | `h_desde_riego` (Python + C + paridad), regla sonda + riego, entrenar sin dudosos, firmware 2.1.0, informe final | modelos/firmware/informe | ✅ (2026-10-23) |
 | M2 | Calibración semanal de la sonda (sigue pendiente en CALIBRACION.md) | **Manuel** | ☐ |
 
 ### Estado al 2026-10-23
@@ -285,14 +302,18 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
   la configuración en `CONFIG_FINAL` de `ml/plantaia_ml/modelos.py`.
   Métricas, costo y justificación en
   [docs/entrega2/RESULTADOS.md](entrega2/RESULTADOS.md).
-  - **Restricción de diseño (2026-10-21):** el semáforo no puede depender sólo
-    de la sonda. Todo candidato usa `suelo_mv` y al menos una ambiental del
-    aire (T, HR o VPD). **La luz no entra** (decidido después de ver
-    resultados: con luz el modelo aprende "oscuro → marchita").
+  - **`regla-p3-f07-79b556`** (2026-10-23): `h_desde_riego` ≤ 5,5 h →
+    estresada; si no, `suelo_mv` ≤ 1716 → saludable, ≤ 1940 → estresada, si
+    no → marchita. F1 macro fuera de fold 0,858 ± 0,049 sin dudosos.
+    Reemplaza a `arbol-p3-f03-ee3419` (árbol con sonda + HR, entrenado con
+    los dudosos: 0,711), que reemplazaba a `arbol-p2-f012-58e644`.
+  - **Restricciones de features:** siempre la sonda, nunca la luz (aprende
+    "oscuro → marchita"). La exigencia de una variable del aire (2026-10-21)
+    se sacó el 2026-10-23: en octubre el aire casi no varió y sólo costaba F1.
   - **Condición de seguridad** (recall de marchita ≥ 0,9 sin dudosos y el
-    ep. 12 ≥ 50 % fuera de fold): hoy no la cumple ninguna configuración sin
-    luz (el ep. 12 no lo acierta ninguna), así que queda la del criterio de
-    §5.3/§5.5: árbol de profundidad 3 con `suelo_mv` y `hum_aire_pct`.
+    ep. 12 ≥ 50 %): **no la cumple** (0,77 y 0 %). Se reporta.
+  - **Riesgo principal:** el corte de 5,5 h coincide con el horario de las
+    observaciones (5–6 h después de cada riego). Ver notebook 03 §7.2.
 - **Sólo datos medidos:** el entrenamiento, la evaluación y el exportador usan
   sólo los episodios reales de `maceta-01` (§3.2).
 - **X sin metadatos de etiqueta:** `modelos.matriz_X` y el notebook descartan
@@ -313,20 +334,20 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
   - Las **272 filas (5 min) de `maceta-01` posteriores al ep. 15**
     (21/10 21:25 → 22/10 20:00 UTC) no tienen observación manual y no
     entran al entrenamiento; se usan sólo como prueba de estabilidad
-    (notebook §6.5: 100 % `saludable`).
+    (notebook §7.3: 100 % `saludable`).
   - La pulsación `estresada` del 22/10 21:34 (firmware 2.0.0) cayó con la
     sonda saturada y sin filas utilizables después: no abre episodio.
 
 ### Lo que sólo puede hacer una persona
 
+Conectar la placa por USB y correr (desde la raíz del repo):
+
 ```bash
-cd firmware
-pio run -t upload            # con la placa por USB
-pio device monitor | tee ../docs/entrega2/logs/placa_$(date +%F).txt
+firmware/tools/flashear_y_registrar.sh          # pio run -t upload + log a docs/entrega2/logs/
 ```
 
-Dejarla al menos 1 h (para salir del warm-up), mojar/secar la sonda con la
-mano para ver cambiar el LED, y pegar 10–20 líneas `[INF]` en el informe.
+Después, mojar o secar la sonda para ver cambiar el LED y pegar las líneas
+`[INF]` en `docs/entrega2/informe_final/informe.md` (sección 5).
 
 ---
 

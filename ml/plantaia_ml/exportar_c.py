@@ -19,10 +19,11 @@ maceta-01 y escribe estos archivos:
 
 Sin dependencias nuevas: numpy, pandas y sklearn.
 
-Formas que sabe exportar: `DecisionTreeClassifier`, `RandomForestClassifier`,
+Formas que sabe exportar: `DecisionTreeClassifier`, `modelos.ReglaSueloRiego` (expone
+el mismo `tree_`, se exporta como árbol con el tipo `regla`), `RandomForestClassifier`,
 `LogisticRegression` (con `StandardScaler` opcional) y `GaussianNB`, siempre dentro del
 `Pipeline` de `modelos.py` (primer paso `sel` = subconjunto de features). La
-placa arma siempre los 7 features; el remapeo de índices queda adentro de
+placa arma siempre los 8 features; el remapeo de índices queda adentro de
 `plantaia_predecir`.
 
 Umbrales de los árboles en float32
@@ -62,12 +63,15 @@ from sklearn.tree import DecisionTreeClassifier
 
 from . import CLASES, RAIZ, SNAPSHOT_VIGENTE
 from .features import FEATURES, N_FEATURES, calcular_features
-from .modelos import matriz_X
+from .modelos import ReglaSueloRiego, matriz_X
 
 RUTA_MODELO = RAIZ / "firmware" / "lib" / "plantaia_ml" / "modelo_plantaia.h"
 RUTA_VECTORES = RAIZ / "firmware" / "test" / "test_modelo" / "vectores.h"
 RUTA_PARIDAD = RAIZ / "firmware" / "test" / "test_features" / "paridad_features.h"
 RUTA_FRONT = RAIZ / "frontend" / "src" / "modelo_placa.json"
+
+# Lo que se exporta como árbol (tablas de nodos): los de sklearn y la regla sonda + riego.
+ARBOLES = (DecisionTreeClassifier, ReglaSueloRiego)
 
 
 # ─── Utilidades ───────────────────────────────────────────────────────────
@@ -127,7 +131,7 @@ def umbrales(modelo: Pipeline) -> list[tuple[int, np.float32]]:
     """(feature del contrato, umbral float32) de todos los nodos internos."""
     cols, _, clf = _partes(modelo)
     arboles = clf.estimators_ if isinstance(clf, RandomForestClassifier) else (
-        [clf] if isinstance(clf, DecisionTreeClassifier) else [])
+        [clf] if isinstance(clf, ARBOLES) else [])
     out = []
     for a in arboles:
         f, u, *_ = _tablas_arbol(a, cols)
@@ -277,10 +281,10 @@ def _c_nb(clf, cols):
 
 def cuerpo_c(modelo: Pipeline) -> tuple[str, list[str]]:
     cols, esc, clf = _partes(modelo)
-    if isinstance(clf, DecisionTreeClassifier):
+    if isinstance(clf, ARBOLES):
         if esc is not None:
             raise ValueError("un árbol no lleva escalado")
-        return "arbol", _c_arbol(clf, cols)
+        return ("regla" if isinstance(clf, ReglaSueloRiego) else "arbol"), _c_arbol(clf, cols)
     if isinstance(clf, RandomForestClassifier):
         return "rf", _c_bosque(clf, cols)
     if isinstance(clf, LogisticRegression):
@@ -314,7 +318,7 @@ def version_modelo(modelo: Pipeline) -> str:
     tipo, cuerpo = cuerpo_c(modelo)
     cols, _, clf = _partes(modelo)
     h = hashlib.sha1("\n".join(cuerpo).encode()).hexdigest()[:6]
-    extra = f"-p{clf.max_depth}" if isinstance(clf, DecisionTreeClassifier) else ""
+    extra = f"-p{clf.get_depth()}" if isinstance(clf, ARBOLES) else ""
     return f"{tipo}{extra}-f{''.join(map(str, cols))}-{h}"
 
 
@@ -405,7 +409,7 @@ def generar_vectores(modelo: Pipeline, Xv: np.ndarray) -> str:
          "#pragma once", "",
          f'#define VEC_MODELO_VERSION "{version_modelo(modelo)}"', "",
          "//      " + "  ".join(FEATURES),
-         "static const float VEC_X[][7] = {"]
+         f"static const float VEC_X[][{N_FEATURES}] = {{"]
     L += ["  {" + ", ".join(f32(v) for v in fila) + "}," for fila in Xv]
     L += ["};", "",
           "static const int VEC_Y[] = {" + ", ".join(str(int(v)) for v in y) + "};",
@@ -428,6 +432,8 @@ def secuencia_paridad(snapshot=SNAPSHOT_VIGENTE, semilla: int = 0) -> pd.DataFra
     - Un hueco de 15 min dentro de un tramo (corte por hueco).
     - Un tramo que arranca con el DHT11 caído 3 muestras y el termistor leyendo:
       no se infiere (el termistor no es respaldo).
+    - Un riego real (19/10 22:40, la sonda cae ~420 mV) para h_desde_riego,
+      y un reinicio después del riego que tiene que conservarlo.
     - Faltantes sueltos de suelo, luz, T y HR.
     """
     from .datos_reales import leer_crudo, leer_episodios, preparar
@@ -455,11 +461,17 @@ def secuencia_paridad(snapshot=SNAPSHOT_VIGENTE, semilla: int = 0) -> pd.DataFra
     e.iloc[:3, e.columns.get_loc("temp_c")] = np.nan
     e.iloc[:3, e.columns.get_loc("hum_aire_pct")] = np.nan
     e["temp_ntc_c"] = e["temp_ntc_c"].fillna(25.0)
+    f = tramo("2026-10-19T21:00Z", 36)                 # riego de las 22:40 (muestra 20)
+    f2 = tramo("2026-10-20T03:00Z", 12)                # reinicio simulado tras el riego
+    f2["boot_id"] = 9002
     # Cada bloque con su propia hora para que no se pisen: se apilan corridos.
     partes, t0 = [], pd.Timestamp("2030-01-01", tz="UTC")
-    for k, p in enumerate([a, c, d, e]):
+    for k, p in enumerate([a, c, d, e, f, f2]):
         p = p.copy()
-        p["ts"] = t0 + (p.ts - p.ts.iloc[0])
+        if k < 5:   # el reinicio tras el riego conserva su hora real relativa al bloque anterior
+            p["ts"] = t0 + (p.ts - p.ts.iloc[0])
+        else:
+            p["ts"] = partes[-1].ts.iloc[0] + (p.ts - f.ts.iloc[0])
         p["boot_id"] = p["boot_id"].astype(int) + 10000 * k   # cada bloque, otro arranque
         t0 = p.ts.iloc[-1] + pd.Timedelta(hours=1)
         partes.append(p)
@@ -481,20 +493,24 @@ def generar_paridad(s: pd.DataFrame) -> tuple[str, pd.DataFrame]:
     f = calcular_features(s)
     reset = (f.tramo != f.tramo.shift()).astype(int)
     crudo = s[["suelo_mv", "luz_mv", "temp_c", "hum_aire_pct", "temp_ntc_c"]].to_numpy()
+    ts = (s.ts.astype("int64") // 10**9).to_numpy()
     L = ["// GENERADO por ml/plantaia_ml/exportar_c.py — no editar.",
          "// Paridad de features Python↔C: una secuencia cruda del snapshot real de",
          "// maceta-01 (con reinicios, un hueco, la sonda saturada como faltante, DHT",
          "// caído al arrancar y faltantes sueltos) y lo que da ml/plantaia_ml/features.py.",
          "#pragma once",
-         "#include <math.h>", "",
+         "#include <math.h>", "#include <stdint.h>", "",
          "// suelo_mv, luz_mv, temp_dht_c, hum_aire_pct, temp_ntc_c; NAN = faltante",
          "static const float PAR_CRUDO[][5] = {"]
     L += ["  {" + ", ".join(f32(v) for v in fila) + "}," for fila in crudo]
     L += ["};",
           "static const int PAR_RESET[] = {" + ", ".join(map(str, reset)) + "};",
+          "// Hora de cada muestra (unix, s). En cada PAR_RESET el riego se conserva,",
+          "// como hace main.cpp restaurándolo de Preferences.",
+          "static const uint32_t PAR_TS[] = {" + ", ".join(f"{int(t)}u" for t in ts) + "};",
           "static const int PAR_OK[] = {" + ", ".join(str(int(v)) for v in f.valido) + "};",
           "static const int PAR_WARMUP[] = {" + ", ".join(str(int(v)) for v in f.warmup) + "};",
-          "static const float PAR_X[][7] = {"]
+          f"static const float PAR_X[][{N_FEATURES}] = {{"]
     X = f[FEATURES].to_numpy()
     L += ["  {" + ", ".join(f32(v) for v in fila) + "}," for fila in X]
     L += ["};", f"static const int PAR_N = {len(s)};"]
@@ -513,7 +529,7 @@ def nodos_arbol(modelo: Pipeline) -> list[dict] | None:
     corre en la placa. Si el modelo no es un árbol devuelve None.
     """
     cols, _, clf = _partes(modelo)
-    if not isinstance(clf, DecisionTreeClassifier):
+    if not isinstance(clf, ARBOLES):
         return None
     t = clf.tree_
     nodos: list[dict] = []
@@ -543,7 +559,7 @@ def generar_json_front(modelo: Pipeline, metricas: dict, fecha: str | None = Non
         "version": version_modelo(modelo),
         "fecha": fecha or _dt.date.today().isoformat(),
         "tipo": type(clf).__name__,
-        "profundidad": int(clf.get_depth()) if isinstance(clf, DecisionTreeClassifier) else None,
+        "profundidad": int(clf.get_depth()) if isinstance(clf, ARBOLES) else None,
         "features": [FEATURES[c] for c in cols],
         "flash_B": bytes_parametros_c(modelo),
         "nodos": nodos_arbol(modelo),
@@ -566,15 +582,18 @@ def metricas_cv(df: pd.DataFrame) -> dict:
     X = matriz_X(df)   # sin metadatos de etiqueta (modelos.matriz_X)
     y = df.clase_codigo.to_numpy(int)
     g = df.episodio_id.to_numpy(int)
+    sd = ~df.dudoso.to_numpy(bool)
     est, grilla = candidatos()[CONFIG_FINAL["tipo"]]
     folds = list(particion_externa().split(X, y, g))
     out = {}
-    for rotulo, ajustar in [
-            ("config. final fija", lambda tr: modelo_final().fit(X[tr], y[tr])),
-            (f"búsqueda anidada del tipo {CONFIG_FINAL['tipo']}",
-             lambda tr: busqueda(est, grilla, n_jobs=1).fit(X[tr], y[tr], groups=g[tr]))]:
+    ajustes = [("config. final fija", lambda tr: modelo_final().fit(X[tr], y[tr]))]
+    if grilla:
+        ajustes.append((f"búsqueda anidada del tipo {CONFIG_FINAL['tipo']}",
+                        lambda tr: busqueda(est, grilla, n_jobs=1).fit(X[tr], y[tr], groups=g[tr])))
+    for rotulo, ajustar in ajustes:
         oof = np.zeros(len(y), int)
         for tr, te in folds:
+            tr = tr[sd[tr]]   # se entrena sin los episodios dudosos (modelos.py)
             oof[te] = ajustar(tr).predict(X[te])
         for nombre, m in [("todos", np.ones(len(y), bool)), ("sin dudosos", ~df.dudoso.to_numpy(bool))]:
             n_ep = df.loc[m, "episodio_id"].nunique()
@@ -597,7 +616,7 @@ def exportar(modelo: Pipeline, df: pd.DataFrame, metricas: dict | None = None,
     met = {(f"{k} ({n_ep} episodios, 5 folds)" if isinstance(v, tuple) else k):
            (f"{v[0]:.3f} ± {v[1]:.3f}" if isinstance(v, tuple) else f"{v:.3f}")
            for k, v in metricas.items()}
-    met["filas de entrenamiento"] = f"{len(df)}"
+    met["filas de entrenamiento (sin dudosos)"] = f"{int((~df.dudoso).sum())}"
     header = generar_header(modelo, met)
     Xv = vectores_prueba(modelo, X)
     vect = generar_vectores(modelo, Xv)
@@ -619,7 +638,8 @@ def main():
     df = serie_maceta01()
     X = matriz_X(df)   # sin metadatos de etiqueta (modelos.matriz_X)
     y = df.clase_codigo.to_numpy(int)
-    modelo = modelo_final().fit(X, y)
+    sd = ~df.dudoso.to_numpy(bool)
+    modelo = modelo_final().fit(X[sd], y[sd])   # sin los episodios dudosos
     r = exportar(modelo, df)
     print(f"modelo {r['version']}")
     for k, v in r["metricas"].items():
