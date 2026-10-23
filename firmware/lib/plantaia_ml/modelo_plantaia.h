@@ -1,12 +1,12 @@
 // ════════════════════════════════════════════════════════════════════════════
 //  modelo_plantaia.h — GENERADO — no editar
 //
-//  Lo escribe ml/plantaia_ml/exportar_c.py (2026-10-22). Para regenerarlo:
+//  Lo escribe ml/plantaia_ml/exportar_c.py (2026-10-23). Para regenerarlo:
 //    cd ml && /opt/anaconda3/bin/python -m plantaia_ml.exportar_c
 //  Elección y evaluación: notebooks/03_modelos.ipynb.
 //
-//  Modelo: arbol-p2-f012-58e644
-//  Features que usa (índices del contrato): 0 suelo_mv, 1 suelo_delta_1h, 2 temp_c
+//  Modelo: arbol-p3-f03-ee3419
+//  Features que usa (índices del contrato): 0 suelo_mv, 3 hum_aire_pct
 //  Orden del vector que recibe plantaia_predecir (docs/ENTREGA2.md §4):
 //    0 suelo_mv
 //    1 suelo_delta_1h
@@ -16,19 +16,19 @@
 //    5 luz_mv
 //    6 luz_media_1h
 //  Métricas (partición por episodio, ver el notebook):
-//    [config. final fija] f1_macro todos, filas fuera de fold juntas (11 ep.): 0.181
-//    [config. final fija] exactitud_balanceada todos, filas fuera de fold juntas (11 ep.): 0.200
-//    [config. final fija] recall_marchita todos, filas fuera de fold juntas (11 ep.): 0.240
-//    [config. final fija] f1_macro sin dudosos, filas fuera de fold juntas (7 ep.): 0.282
-//    [config. final fija] exactitud_balanceada sin dudosos, filas fuera de fold juntas (7 ep.): 0.279
-//    [config. final fija] recall_marchita sin dudosos, filas fuera de fold juntas (7 ep.): 0.360
-//    [búsqueda anidada del tipo Árbol de decisión] f1_macro todos, filas fuera de fold juntas (11 ep.): 0.186
-//    [búsqueda anidada del tipo Árbol de decisión] exactitud_balanceada todos, filas fuera de fold juntas (11 ep.): 0.207
-//    [búsqueda anidada del tipo Árbol de decisión] recall_marchita todos, filas fuera de fold juntas (11 ep.): 0.000
-//    [búsqueda anidada del tipo Árbol de decisión] f1_macro sin dudosos, filas fuera de fold juntas (7 ep.): 0.316
-//    [búsqueda anidada del tipo Árbol de decisión] exactitud_balanceada sin dudosos, filas fuera de fold juntas (7 ep.): 0.326
-//    [búsqueda anidada del tipo Árbol de decisión] recall_marchita sin dudosos, filas fuera de fold juntas (7 ep.): 0.000
-//    filas de entrenamiento: 1357
+//    [config. final fija] f1_macro todos, filas fuera de fold juntas (24 ep.): 0.651
+//    [config. final fija] exactitud_balanceada todos, filas fuera de fold juntas (24 ep.): 0.669
+//    [config. final fija] recall_marchita todos, filas fuera de fold juntas (24 ep.): 0.590
+//    [config. final fija] f1_macro sin dudosos, filas fuera de fold juntas (20 ep.): 0.711
+//    [config. final fija] exactitud_balanceada sin dudosos, filas fuera de fold juntas (20 ep.): 0.737
+//    [config. final fija] recall_marchita sin dudosos, filas fuera de fold juntas (20 ep.): 0.690
+//    [búsqueda anidada del tipo Árbol de decisión] f1_macro todos, filas fuera de fold juntas (24 ep.): 0.711
+//    [búsqueda anidada del tipo Árbol de decisión] exactitud_balanceada todos, filas fuera de fold juntas (24 ep.): 0.719
+//    [búsqueda anidada del tipo Árbol de decisión] recall_marchita todos, filas fuera de fold juntas (24 ep.): 0.625
+//    [búsqueda anidada del tipo Árbol de decisión] f1_macro sin dudosos, filas fuera de fold juntas (20 ep.): 0.779
+//    [búsqueda anidada del tipo Árbol de decisión] exactitud_balanceada sin dudosos, filas fuera de fold juntas (20 ep.): 0.792
+//    [búsqueda anidada del tipo Árbol de decisión] recall_marchita sin dudosos, filas fuera de fold juntas (20 ep.): 0.731
+//    filas de entrenamiento: 5663
 //
 //  API fija: devuelve 1 saludable, 2 estresada, 3 marchita = argmax de proba
 //  (empate → código menor); si proba != NULL escribe proba[0..2] en ese orden.
@@ -44,20 +44,25 @@
 
 #define PLANTAIA_N_FEATURES      7
 #define PLANTAIA_N_CLASES        3
-#define PLANTAIA_MODELO_VERSION  "arbol-p2-f012-58e644"
+#define PLANTAIA_MODELO_VERSION  "arbol-p3-f03-ee3419"
 
-#define PLANTAIA_ARBOL_N_NODOS 5
-#define PLANTAIA_ARBOL_N_HOJAS 3
+#define PLANTAIA_ARBOL_N_NODOS 15
+#define PLANTAIA_ARBOL_N_HOJAS 8
 // Nodo interno: x[FEAT] <= UMBRAL → IZQ, si no → DER. Hoja: FEAT = -1 e IZQ = índice en HOJA.
-static const int8_t PLANTAIA_ARBOL_FEAT[5] = {2, -1, 0, -1, -1};
-static const float PLANTAIA_ARBOL_UMBRAL[5] = {10.25f, 0.0f, 1821.5f, 0.0f, 0.0f};
-static const int16_t PLANTAIA_ARBOL_IZQ[5] = {1, 0, 3, 1, 2};
-static const int16_t PLANTAIA_ARBOL_DER[5] = {2, -1, 4, -1, -1};
+static const int8_t PLANTAIA_ARBOL_FEAT[15] = {0, 0, 0, -1, -1, 0, -1, -1, 0, 3, -1, -1, 3, -1, -1};
+static const float PLANTAIA_ARBOL_UMBRAL[15] = {1743.5f, 1488.25f, 1445.75f, 0.0f, 0.0f, 1716.5f, 0.0f, 0.0f, 1936.5f, 47.75f, 0.0f, 0.0f, 43.5f, 0.0f, 0.0f};
+static const int16_t PLANTAIA_ARBOL_IZQ[15] = {1, 2, 3, 0, 1, 6, 2, 3, 9, 10, 4, 5, 13, 6, 7};
+static const int16_t PLANTAIA_ARBOL_DER[15] = {8, 5, 4, -1, -1, 7, -1, -1, 12, 11, -1, -1, 14, -1, -1};
 // Probabilidades de cada hoja: saludable, estresada, marchita.
-static const float PLANTAIA_ARBOL_HOJA[3][3] = {
-  {0.0f, 0.0f, 1.0f},
-  {0.447734684f, 0.278801352f, 0.273463935f},
-  {0.0296127554f, 0.97038722f, 0.0f},
+static const float PLANTAIA_ARBOL_HOJA[8][3] = {
+  {0.0436476171f, 0.956352353f, 0.0f},
+  {0.424763799f, 0.394871145f, 0.180365041f},
+  {0.817953765f, 0.0829260349f, 0.0991201848f},
+  {0.344684482f, 0.655315518f, 0.0f},
+  {0.0220529344f, 0.62452358f, 0.353423476f},
+  {0.0112650255f, 0.988734961f, 0.0f},
+  {0.0f, 1.0f, 0.0f},
+  {0.0f, 0.0616629757f, 0.938337028f},
 };
 
 static inline int plantaia_predecir(const float x[PLANTAIA_N_FEATURES], float *proba) {

@@ -11,7 +11,7 @@ Protocolo
   nunca partido (las filas contiguas comparten etiqueta y están muy
   correlacionadas; ver CLAUDE.md). Se usa `StratifiedGroupKFold`, que es
   `GroupKFold` repartiendo los episodios lo más parejo posible entre clases.
-  Con 11 episodios cada fold de test tiene 2 o 3 y ninguno tiene las tres
+  Con 24 episodios cada fold de test tiene 4 o 5 y no siempre están las tres
   clases, así que el notebook calcula las métricas sobre las predicciones
   fuera de fold juntas, con desvío por bootstrap de episodios.
 - Hiperparámetros con búsqueda **anidada**: adentro de cada fold externo,
@@ -331,17 +331,20 @@ def busqueda(est: Pipeline, grilla: dict, n_jobs: int = -1) -> GridSearchCV:
 
 
 # ─── Modelo que va a la placa ─────────────────────────────────────────────
-# Lo elige el notebook 03 sólo con los episodios medidos: §5.3 (costo, F1 macro
-# fuera de fold sin dudosos dentro de 1 desvío bootstrap del mejor, desempate
-# por interpretabilidad) y, dentro del tipo, la configuración más simple a 1
-# desvío de la mejor de la búsqueda por episodio que además use la ambiental
-# (§5.5). Ninguna configuración sin luz cumple la condición de seguridad de
-# §5.6, así que queda la de §5.5: un árbol de profundidad 2 con suelo_mv,
-# suelo_delta_1h y temp_c. El notebook avisa si esto deja de coincidir, y
+# Lo elige el notebook 03 sólo con los episodios medidos de maceta-01
+# (snapshot del 23/10): §5.3 (costo, F1 macro fuera de fold sin dudosos dentro de
+# 1 desvío bootstrap del mejor, desempate por interpretabilidad) y, dentro del
+# tipo, la configuración más simple a 1 desvío de la mejor de la búsqueda por
+# episodio que además use la ambiental (§5.5). Ninguna configuración sin luz
+# cumple la condición de seguridad de §5.6 (el ep. 12 no lo acierta ninguna),
+# así que queda la de §5.5: un árbol de profundidad 3 con suelo_mv y
+# hum_aire_pct. El notebook avisa si esto deja de coincidir, y
 # `python -m plantaia_ml.exportar_c` lo reentrena con esta configuración.
+# (Con el snapshot del 21/10, 11 episodios, era un árbol de profundidad 2 con
+# suelo_mv, suelo_delta_1h y temp_c: arbol-p2-f012-58e644.)
 CONFIG_FINAL = {
     "tipo": "Árbol de decisión",
-    "params": {"sel__columnas": (0, 1, 2), "clf__max_depth": 2, "clf__min_samples_leaf": 100},
+    "params": {"sel__columnas": (0, 3), "clf__max_depth": 3, "clf__min_samples_leaf": 20},
 }
 
 

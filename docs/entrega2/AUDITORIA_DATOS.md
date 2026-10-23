@@ -332,3 +332,17 @@ repo). Corren con `/opt/anaconda3/bin/python`.
 | `figs_real.py` | Figuras de `docs/entrega2/fig/auditoria_*.png` |
 
 La descarga de la base está en `descargas/mediciones.csv`.
+
+---
+
+## Adenda (2026-10-23): el tramo del 03/10 al 18/10
+
+Esta auditoría es del snapshot del 21/10, cuando ese tramo era un hueco. El
+snapshot del 23/10 (`data/mediciones_raw_2026-10-23.csv`, 21.850 filas) lo
+trae: 4.354 filas a 5 min exactos, 4 arranques, 13 pulsaciones manuales y
+ningún error de sensor salvo `luz_saturada` de oscuridad. Es la misma maceta;
+las filas quedaron en la base con el identificador `maceta-02` por error y el
+análisis las unifica al leer. Sus `id` (23186–27539) son posteriores a la
+fila del 22/10 21:34 (23185) aunque su `ts_servidor` diga 03/10–18/10: se
+cargaron después. El análisis usa `ts_dispositivo`. Detalle en
+`data/README.md`; resultados en `RESULTADOS.md`.

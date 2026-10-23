@@ -5,7 +5,8 @@ informe). Si dos piezas no coinciden en un nombre de feature, un orden o una
 unidad, manda lo que dice este archivo; si este archivo está mal, se corrige
 acá primero y después en el código.
 
-Fecha de arranque: 2026-10-21.
+Fecha de arranque: 2026-10-21. Re-ejecutada el 2026-10-23 con el snapshot que
+suma el tramo del 03/10 al 18/10 (§1.1).
 
 ---
 
@@ -13,7 +14,7 @@ Fecha de arranque: 2026-10-21.
 
 | Requisito | Entregable | Dónde |
 |---|---|---|
-| Usar el dataset de la Tarea 1 | Snapshot real + episodios | `data/mediciones_raw_2026-10-21.csv`, `data/episodios.csv` |
+| Usar el dataset de la Tarea 1 | Snapshot real + episodios | `data/mediciones_raw_2026-10-23.csv`, `data/episodios.csv` |
 | Preparar los datos / feature engineering | Módulo de features compartido | `ml/plantaia_ml/features.py` |
 | Codificar el target | 3 clases, códigos 1–3 (ver §2) | `ml/plantaia_ml/` |
 | Implementar y comparar clasificadores | Notebook ejecutado + resumen de resultados | `notebooks/03_modelos.ipynb`, `docs/entrega2/RESULTADOS.md`, `docs/entrega2/tablas_03_modelos.md` |
@@ -25,8 +26,8 @@ Fecha de arranque: 2026-10-21.
 | Actuador físico | Semáforo LED = predicción del modelo | GPIO 25/26/27 |
 | Documentar la lógica en el micro | | `firmware/lib/plantaia_ml/README.md` |
 | Discusión (ventajas, límites, memoria/CPU, mejoras) | | informe + notebook §7 |
-| Informe PDF ≤ 3 páginas | Fuente + PDF | `docs/entrega2/informe/` (fuera del repo) |
-| Logs de inferencia en tiempo real | Replay en host (la placa no se reflasheó) | `docs/entrega2/logs/replay_host.txt` |
+| Informe PDF ≤ 3 páginas | Fuente con marcas de figuras + figuras | `docs/entrega2/informe_v2/` (versión vigente); `docs/entrega2/informe/` (anterior) |
+| Logs de inferencia en tiempo real | Replay en host + log de la placa del 22/10 (modelo anterior) | `docs/entrega2/logs/replay_host.txt`, `docs/entrega2/logs/placa_2026-10-22*.txt` |
 
 ---
 
@@ -45,6 +46,20 @@ Fecha de arranque: 2026-10-21.
   frágil.** Aun así se entrena y evalúa **sólo con lo que midió la placa**:
   partición por episodio, baselines obligatorios, y el N que se reporta son
   los episodios reales. Los días sin datos no se completan (§3.2).
+
+### 1.1 Re-ejecución con el tramo del 03/10 al 18/10 (2026-10-23)
+
+- Snapshot `data/mediciones_raw_2026-10-23.csv` (21.850 filas). Trae
+  4.354 filas a 5 min del **03/10 al 18/10**, que antes era un hueco, con 13
+  observaciones manuales que pasan a ser los **episodios 16–28**. Es la misma
+  maceta: esas filas quedaron en la base con el identificador `maceta-02` por
+  error y se unifican al leer (detalle en `data/README.md`).
+- Con 24 episodios (20 sin dudosos) el mejor candidato llega a F1 macro 0,78
+  por episodio (antes ~0,3). La regla de dos umbrales sobre `suelo_mv` sigue
+  siendo la mejor (0,82).
+- El criterio de selección **no se tocó** y eligió otro modelo:
+  `arbol-p3-f03-ee3419` (árbol de profundidad 3 con `suelo_mv` y
+  `hum_aire_pct`), que reemplaza a `arbol-p2-f012-58e644`.
 
 ### Decisión de arquitectura que cambia
 
@@ -99,10 +114,11 @@ clases**.
    - Marcar los episodios dudosos para reportar con y sin ellos
      (`EPISODIOS_DUDOSOS = {8, 9, 11, 14}`, ver la nota de cada uno).
 
-### 3.2 Los días sin datos de `maceta-01`
+### 3.2 Los días sin datos
 
-Hay **una sola maceta**, `maceta-01`, y su serie tiene huecos: los grandes son
-**17/09 → 01/10** (con algunas filas sueltas el 21–22/09) y **03/10 → 18/10**,
+Hay **una sola maceta**, `maceta-01`, y su serie tiene huecos: el grande es
+**17/09 → 01/10** (con algunas filas sueltas el 21–22/09; el del 03/10 →
+18/10 se completó con el snapshot del 23/10, ver §1.1),
 más cortes chicos por reinicios y cortes de luz. **Los huecos quedan como
 huecos**: no se interpolan ni se completan con datos simulados.
 
@@ -167,8 +183,8 @@ Reglas:
 ### 5.1 Protocolo de evaluación
 
 - **Partición por `episodio_id`** (k=5, `StratifiedGroupKFold`) sobre la
-  serie medida de `maceta-01`. Con 11 episodios cada fold de test tiene 2 o 3
-  y ninguno tiene las tres clases, así que las métricas se calculan **una vez
+  serie medida. Con 24 episodios cada fold de test tiene 4 o 5 y no siempre
+  están las tres clases, así que las métricas se calculan **una vez
   sobre las predicciones fuera de fold juntas**, con el desvío de un
   **bootstrap por episodio** (no media ± desvío por fold).
 - Las métricas se reportan con y sin los episodios dudosos (8, 9, 11, 14).
@@ -257,10 +273,12 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
 | I1 | `pio test -e native` y `pio run` en verde con el modelo real | integración | ✅ |
 | D1 | Informe ≤ 3 págs. en PDF + figuras + logs | informe | fuera del repo |
 | D2 | Actualizar CLAUDE.md, ARQUITECTURA.md §7, READMEs | integración | ✅ |
-| M1 | ~~Flashear la placa y capturar el log real de inferencia~~ | **Manuel** | descartado (2026-10-22): la placa sigue con 1.1.0 |
+| M1 | Flashear la placa y capturar el log real de inferencia | **Manuel** | hecho el 22/10 con `arbol-p2-f012-58e644` (`t_us=33` en la ESP32); **falta reflashear con `arbol-p3-f03-ee3419`** |
+| A5 | Episodios 16–28 (03/10 → 18/10) + unificar las filas con identificador `maceta-02` | datos | ✅ (2026-10-23) |
+| B4 | Re-ejecutar el notebook 03, re-exportar, informe v2 | modelos/informe | ✅ (2026-10-23) |
 | M2 | Calibración semanal de la sonda (sigue pendiente en CALIBRACION.md) | **Manuel** | ☐ |
 
-### Estado al 2026-10-21
+### Estado al 2026-10-23
 
 - **Modelo final:** la versión vigente está en
   `firmware/lib/plantaia_ml/modelo_plantaia.h` (`PLANTAIA_MODELO_VERSION`) y
@@ -273,7 +291,8 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
     resultados: con luz el modelo aprende "oscuro → marchita").
   - **Condición de seguridad** (recall de marchita ≥ 0,9 sin dudosos y el
     ep. 12 ≥ 50 % fuera de fold): hoy no la cumple ninguna configuración sin
-    luz, así que queda la del criterio de §5.3 (árbol de profundidad 2).
+    luz (el ep. 12 no lo acierta ninguna), así que queda la del criterio de
+    §5.3/§5.5: árbol de profundidad 3 con `suelo_mv` y `hum_aire_pct`.
 - **Sólo datos medidos:** el entrenamiento, la evaluación y el exportador usan
   sólo los episodios reales de `maceta-01` (§3.2).
 - **X sin metadatos de etiqueta:** `modelos.matriz_X` y el notebook descartan
@@ -291,10 +310,12 @@ Fase 1 (en paralelo)          Fase 2                 Fase 3
     inferencia y el LED siguen funcionando).
   - `GET /api/v1/dataset.csv` da **404**, aunque CLAUDE.md lo menciona; el
     volcado que existe es `/api/v1/mediciones.csv`.
-  - Las **184 filas (5 min) posteriores al snapshot** (21/10 21:25 → 22/10
-    12:40 UTC, `data/mediciones_raw_2026-10-22.csv`) no tienen observación
-    manual y no entran al entrenamiento; se usan sólo como prueba de
-    estabilidad (notebook §6.5: 100 % `saludable`).
+  - Las **272 filas (5 min) de `maceta-01` posteriores al ep. 15**
+    (21/10 21:25 → 22/10 20:00 UTC) no tienen observación manual y no
+    entran al entrenamiento; se usan sólo como prueba de estabilidad
+    (notebook §6.5: 100 % `saludable`).
+  - La pulsación `estresada` del 22/10 21:34 (firmware 2.0.0) cayó con la
+    sonda saturada y sin filas utilizables después: no abre episodio.
 
 ### Lo que sólo puede hacer una persona
 

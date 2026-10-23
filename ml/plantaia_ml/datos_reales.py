@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import DATOS, SNAPSHOT_VIGENTE
+from . import ALIAS_MACETA, DATOS, MACETA, SNAPSHOT_VIGENTE
 
 HORA_VALIDA_DESDE = pd.Timestamp("2026-01-01", tz="UTC")
 BIN = pd.Timedelta(minutes=5)
@@ -54,9 +54,26 @@ _NUMERICAS = ["suelo_mv", "suelo_raw", "luz_mv", "luz_raw", "temperatura_c",
               "humedad_ambiente_pct", "temp_ntc_c"]
 
 
+# Los arranques del identificador viejo se renumeran al unificar: "maceta-02"
+# reinició con boot_id 1–4, números que maceta-01 ya usó en septiembre, y el
+# corte post-boot y los tramos de features se arman por (dispositivo, boot_id).
+DESPLAZAMIENTO_BOOT_ALIAS = 1000
+
+
+def unificar_maceta(raw: pd.DataFrame) -> pd.DataFrame:
+    """Las filas con identificador en `ALIAS_MACETA` pasan a ser de `MACETA` (es una sola planta)."""
+    alias = raw.dispositivo.isin(ALIAS_MACETA)
+    if not alias.any():
+        return raw
+    raw = raw.copy()
+    raw.loc[alias, "boot_id"] = raw.loc[alias, "boot_id"] + DESPLAZAMIENTO_BOOT_ALIAS
+    raw.loc[alias, "dispositivo"] = MACETA
+    return raw
+
+
 def leer_crudo(ruta: Path | str = SNAPSHOT_VIGENTE) -> pd.DataFrame:
-    """Lee un CSV con el esquema crudo de Railway y agrega la columna `ts` (UTC)."""
-    raw = pd.read_csv(ruta, low_memory=False)
+    """Lee un CSV con el esquema crudo de Railway, unifica la maceta y agrega `ts` (UTC)."""
+    raw = unificar_maceta(pd.read_csv(ruta, low_memory=False))
     raw["ts"] = elegir_hora(raw)
     return raw
 
@@ -194,13 +211,13 @@ COLUMNAS_SALIDA = ["ts", "dispositivo", "boot_id", "episodio_id", "clase", "etiq
 def cargar_reales(snapshot: Path | str = SNAPSHOT_VIGENTE,
                   episodios: Path | str = DATOS / "episodios.csv",
                   post_boot_min: float = POST_BOOT_MIN, filtrado: bool = True) -> pd.DataFrame:
-    """Muestras reales de `maceta-01` a 5 min, cruzadas con los episodios.
+    """Muestras reales de la maceta a 5 min, cruzadas con los episodios.
 
     Con `filtrado=False` devuelve también las filas post-boot, saturadas y sin
     episodio, con sus marcas (`post_boot`, `suelo_saturado`).
     """
     raw = leer_crudo(snapshot)
-    raw = raw[raw.dispositivo == "maceta-01"]
+    raw = raw[raw.dispositivo == MACETA]
     b = preparar(raw, leer_episodios(episodios), post_boot_min=post_boot_min)
     if filtrado:
         b = filtrar(b)
