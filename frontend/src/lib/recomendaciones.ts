@@ -6,14 +6,15 @@ import type { Clase } from "../tipos";
  *  qué dato la disparó. */
 
 // Sonda resistiva: más mV = más seco. Octubre: recién regado ~1400–1500 mV,
-// saludable ~1450–1500, marchita ~1750, lo más seco ~1960; el árbol de la
-// placa corta en 1821,5. La escala se corre con la corrosión (CALIBRACION.md).
+// saludable ~1450–1600, marchita ~1940–1960, lo más seco ~1980; el árbol de la
+// placa (modelo_placa.json) corta en 1716,5 y 1936,5. La escala se corre con
+// la corrosión (CALIBRACION.md).
 export const SUELO_SECO_MV = 1800;
 export const SUELO_HUMEDO_MV = 1550;
 // LDR: lámpara ~1780 mV, sol directo de septiembre hasta ~2900.
 export const LUZ_FUERTE_MV = 2300;
-// El árbol de la placa marca marchita con ≤ 10,25 °C (ep. 1, ~8,5 °C); el
-// radiador del 15–16/09 llevó la maceta a 28–36 °C.
+// La única marchita fría fue el ep. 1 (~8,5 °C); el radiador del 15–16/09
+// llevó la maceta a 28–36 °C.
 export const TEMP_FRIO_C = 12;
 export const TEMP_CALOR_C = 28;
 export const HR_SECA_PCT = 35;
