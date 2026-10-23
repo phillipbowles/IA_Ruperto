@@ -14,8 +14,20 @@ const SUSTRATO = { seco: "seco", intermedio: "intermedio", humedo: "húmedo" } a
 const RECIENTES = 800;
 const SEIS_HORAS = 6 * 3600e3;
 
-export function Recomendaciones({ estado, fotoDeAhora, setFotoDeAhora }: {
-  estado: Clase;
+export type Situacion = "sin_foto" | "analizando" | "error" | "no_planta" | "lista";
+
+const ESPERA: Record<Exclude<Situacion, "lista">, string> = {
+  sin_foto: "Subí una foto arriba: la recomendación sale de su análisis.",
+  analizando: "Analizando la foto…",
+  error: "Sin análisis no hay recomendación: probá de nuevo o cambiá de método.",
+  no_planta: "No se ve una planta en la foto: no hay nada que recomendar.",
+};
+
+/** Siempre visible en la pestaña: el interruptor se puede marcar antes de
+ *  subir la foto, y si no hay recomendación se dice por qué. */
+export function Recomendaciones({ estado, situacion, fotoDeAhora, setFotoDeAhora }: {
+  estado: Clase | null;
+  situacion: Situacion;
   fotoDeAhora: boolean;
   setFotoDeAhora: (v: boolean) => void;
 }) {
@@ -46,8 +58,7 @@ export function Recomendaciones({ estado, fotoDeAhora, setFotoDeAhora }: {
     return { sensores: s, ultima: u };
   }, [data]);
 
-  if (isPending) return null;
-  const recs = recomendar(estado, sensores, fotoDeAhora);
+  const recs = estado && situacion === "lista" && !isPending ? recomendar(estado, sensores, fotoDeAhora) : [];
   const suelo = sustrato(sensores?.suelo_mv ?? null);
 
   return (
@@ -70,6 +81,8 @@ export function Recomendaciones({ estado, fotoDeAhora, setFotoDeAhora }: {
           </div>
         )}
       </div>
+      {situacion !== "lista" && <p className="lirio__detalle">{ESPERA[situacion]}</p>}
+      {situacion === "lista" && isPending && <p className="lirio__detalle">Leyendo los sensores…</p>}
       <ul className="recos__lista">
         {recs.map((r) => (
           <li key={r.titulo} className={`recos__item recos--${r.nivel}`}>
