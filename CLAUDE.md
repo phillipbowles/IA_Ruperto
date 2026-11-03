@@ -183,6 +183,14 @@ la placa lee → arma las features → predice → prende el LED → POST con
   `datos_reales.unificar_maceta` las une al leer (data/README.md). Los huecos de la serie no se completan
   (docs/ENTREGA2.md §3.2), y el N efectivo son los episodios medidos.
 
+## Chatbot Ruperto (Tarea 3)
+
+Bot de Telegram con Gemini y RAG; la planta se llama **Ruperto**. El plan, el
+contrato (índice, tablas, interfaces) y el **registro de decisiones** viven en
+[docs/ENTREGA3.md](docs/ENTREGA3.md): toda decisión relevante para la entrega
+se anota ahí. `backend/app/bot/indice/` es **GENERADO** por
+`rag/construir_indice.py`: no se edita a mano.
+
 ## Datos
 
 El almacenamiento es **Postgres en Railway**, alimentado por HTTPS desde la
