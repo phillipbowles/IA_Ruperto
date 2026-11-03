@@ -3,6 +3,8 @@
 #   docker compose up --build      levanta todo (migra solo)
 #   docker compose logs -f backend seguir las migraciones y el server
 #   docker compose down            parar; agregar -v para borrar también los datos
+#   docker compose --profile bot up  además el bot de Telegram (necesita
+#                                    TELEGRAM_BOT_TOKEN y GEMINI_API_KEY en .env)
 #
 # La primera vez: cp .env.example .env
 
@@ -67,6 +69,34 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
+    restart: unless-stopped
+
+  # ─── bot de Telegram (Ruperto, Tarea 3) ─────────────────────────────────
+  # Misma imagen que el backend, otro comando (docs/ENTREGA3.md D2). En un
+  # perfil aparte para que `docker compose up` sin token no falle. Polling:
+  # una sola instancia por token, también en local (si el de Railway está
+  # corriendo con el mismo token, los dos se pisan los mensajes).
+  bot:
+    profiles: ["bot"]
+    build:
+      context: ./backend
+      target: dev
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy   # el backend ya aplicó las migraciones
+    command: ["python", "-m", "app.bot"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-planta}:${POSTGRES_PASSWORD:-planta}@db:5432/${POSTGRES_DB:-maceta}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODELO: ${GEMINI_MODELO:-}
+      GEMINI_MODELO_EMBED: ${GEMINI_MODELO_EMBED:-}
+      BOT_DISPOSITIVO: ${BOT_DISPOSITIVO:-maceta-01}
+    volumes:
+      - ./backend:/app
+      - /app/plantaia_backend.egg-info
     restart: unless-stopped
 
   # ─── front ──────────────────────────────────────────────────────────────
