@@ -50,6 +50,7 @@ def test_sonda_saturada_es_faltante(db):
     ctx = contexto.armar_contexto(db, ahora=filas[-1].ts_dispositivo)
     assert ctx.ultima.suelo_mv is None
     assert ctx.regla.clase is None and "suelo_mv" in ctx.regla.motivo
+    assert "saturada (suelo_raw 4095)" in contexto.texto_estado(ctx)
 
 
 def test_otro_dispositivo_no_se_mezcla(db, monkeypatch):

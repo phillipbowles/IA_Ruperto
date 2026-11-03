@@ -61,6 +61,7 @@ class Ultima:
     vpd_kpa: float | None
     luz_mv: float | None
     firmware: str | None
+    suelo_nota: str | None = None   # por qué no hay sonda válida, si no la hay
 
 
 @dataclass
@@ -130,7 +131,12 @@ def armar_contexto(db: Session, ahora: datetime | None = None,
              for f in filas]
     suelo_ult = modelo.suelo_valido(serie[-1])
     edad = max(0, int((ahora - ts_ult).total_seconds() // 60))
-    ctx.ultima = Ultima(ts=ts_ult, edad_min=edad, suelo_mv=suelo_ult,
+    nota = None
+    if suelo_ult is None:
+        nota = (f"saturada (suelo_raw {ultima.suelo_raw}): la sonda probablemente está fuera de "
+                "la tierra o desconectada" if ultima.suelo_raw in modelo.SUELO_SATURADO
+                else "la placa no mandó lectura")
+    ctx.ultima = Ultima(ts=ts_ult, edad_min=edad, suelo_mv=suelo_ult, suelo_nota=nota,
                         temp_c=ultima.temperatura_c, hum_pct=ultima.humedad_ambiente_pct,
                         vpd_kpa=vpd_kpa(ultima.temperatura_c, ultima.humedad_ambiente_pct),
                         luz_mv=ultima.luz_mv, firmware=ultima.firmware_version)
@@ -194,7 +200,10 @@ def texto_estado(ctx: Contexto) -> str:
     if ctx.sensores_caidos:
         lineas.append(f"SENSORES CAÍDOS: no llegan datos desde {local(u.ts)}. Los valores que siguen "
                       "son de esa última medición, NO de ahora.")
-    lineas.append(f"Sonda de suelo: {_f(u.suelo_mv, unidad=' mV')} (más mV = más seca; resistiva).")
+    if u.suelo_mv is not None:
+        lineas.append(f"Sonda de suelo: {u.suelo_mv:.0f} mV (más mV = más seca; resistiva).")
+    else:
+        lineas.append(f"Sonda de suelo: sin dato válido en la última medición ({u.suelo_nota}).")
     lineas.append(f"Aire: {_f(u.temp_c, '.1f', ' °C')}, HR {_f(u.hum_pct, '.0f', ' %')}, "
                   f"VPD {_f(u.vpd_kpa, '.2f', ' kPa')}. Luz (LDR): {_f(u.luz_mv, unidad=' mV')}.")
     if ctx.ultimo_riego is not None and ctx.h_desde_riego < modelo.RIEGO_TOPE_H:

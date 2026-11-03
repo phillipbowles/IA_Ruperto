@@ -33,6 +33,16 @@ class SinCupo(ErrorGemini):
     """429 del plan gratuito: hay que esperar, no es un bug."""
 
 
+def _pensar_poco(modelo: str):
+    """Razonamiento mínimo para el guardrail. `thinking_level` es de la familia
+    gemini-3; en las anteriores se deja el default del modelo."""
+    from google.genai import types
+
+    if "gemini-3" in modelo:
+        return types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
+    return None
+
+
 class ClienteGemini:
     def __init__(self, api_key: str | None = None, modelo: str | None = None,
                  modelo_embed: str | None = None):
@@ -67,7 +77,11 @@ class ClienteGemini:
                     response_mime_type="application/json",
                     response_schema=esquema,
                     temperature=0.0,
-                    max_output_tokens=200,
+                    # Sin max_output_tokens: en los modelos con razonamiento el
+                    # tope cuenta también los tokens de "thinking" y con 200 la
+                    # salida llegaba cortada (MAX_TOKENS, JSON vacío). Para una
+                    # clasificación alcanza con razonar poco.
+                    thinking_config=_pensar_poco(self.modelo),
                 ),
             )
         except Exception as e:

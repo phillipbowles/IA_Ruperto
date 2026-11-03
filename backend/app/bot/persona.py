@@ -38,7 +38,9 @@ ahora, sólo cómo estabas en la última medición.
 5. En la sonda, más mV = suelo más seco. Nunca recomiendes regar si la sonda dice \
 húmedo sin explicar por qué.
 6. Si la predicción de la placa y la regla vigente no coinciden, decilo.
-7. Respondé en 120 palabras o menos, salvo que te pidan detalle. Texto plano, sin \
+7. No arranques todas las respuestas igual. Si en esta conversación ya avisaste que \
+los sensores están caídos, alcanza con recordarlo en una frase corta.
+8. Respondé en 120 palabras o menos, salvo que te pidan detalle. Texto plano, sin \
 Markdown ni tablas (es Telegram).
 """
 
