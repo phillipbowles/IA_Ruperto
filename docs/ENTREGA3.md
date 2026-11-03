@@ -42,7 +42,8 @@ Fecha de arranque: 2026-11-03. Entrega: **domingo 15/11, 23:59**.
   Mientras tanto la predicción que llega en el POST es la del árbol viejo; por
   eso el bot además recalcula la regla vigente en el server (D8).
 - El snapshot más nuevo del repo es del 23/10; la base tiene datos hasta el
-  29/10.
+  29/10. *Revisión (D106): el snapshot del 03/11 muestra que del 22/10 21:34
+  al 29/10 no hay nada y el 29/10 son sólo 3 filas.*
 
 ---
 
@@ -137,6 +138,95 @@ toxicidad, artículos open access). Cada documento lleva URL, institución y
 fecha de acceso en su cabecera; se guarda el texto limpio relevante, no la
 página entera. Ruperto cita la fuente cuando la usa.
 
+**D101 — Las 9 fuentes científicas del corpus** (2026-11-03, T1). En
+`rag/corpus/ciencia/`, con institución, URL y fecha de acceso (todas bajadas y
+verificadas el 03/11):
+
+| archivo | fuente | para qué |
+|---|---|---|
+| `ufifas-house-plant-care` | UF/IFAS EDIS ENH1216, *Florida Foliage House Plant Care: Spathiphyllum* | ficha de cuidados de interior |
+| `ufifas-produccion-interiorismo` | UF/IFAS EDIS ENH958, *Cultural Guidelines… Interiorscape Spathiphyllum* | riego, sustrato, fertilización y tabla de síntomas: el "crash" por falta de agua y la recuperación en horas |
+| `ufifas-dano-por-frio` | UF/IFAS EDIS ENH841, *Chilling Injury… Spathiphyllum* | temperatura mínima y daño por frío |
+| `ufifas-gardening-solutions` | UF/IFAS Gardening Solutions, *Peace Lily* | resumen de divulgación |
+| `ncstate-plant-toolbox` | NC State Extension Plant Toolbox | luz, temperatura, riego, plagas, toxicidad en humanos |
+| `aspca-toxicidad` | ASPCA Animal Poison Control | toxicidad en perros y gatos |
+| `rhs-como-cultivar` | RHS, *How to grow peace lilies* | riego, humedad, problemas |
+| `rhs-guia-genero` | RHS, *Peace lilies* (guía del género) | descripción, preferencias |
+| `bmc-estres-hidrico` | Ibrahim et al. 2024, *BMC Plant Biology* 24:924 (CC BY 4.0) | fisiología del estrés hídrico en *S. wallisii*: ABA, cierre estomático, prolina, pérdida de turgencia |
+
+- **Extractos textuales, en inglés**: no se tradujeron ni se resumieron, para
+  que lo que cita Ruperto sea lo que dice la fuente. Los embeddings de Gemini
+  son multilingües (la recuperación con preguntas en español anda: "¿es
+  tóxico para mi gato?" → ASPCA primero) y la traducción la hace el generador
+  al responder.
+- Se omitieron tablas de cultivares, figuras, ventanas de glosario y una
+  oración de ENH958 sobre el pH del sustrato que en la página publicada está
+  truncada ("pH range of 1.0 to 2.0"). Cada omisión está en la `nota` de la
+  cabecera.
+- **Descartadas**: Missouri Botanical Garden (el PlantFinder no devolvió la
+  ficha de *Spathiphyllum*: error 500 en la búsqueda y otra planta con el
+  código probado); un artículo de *Journal of Horticulture* (Longdom/OMICS)
+  sobre antitranspirantes en hojas cortadas, por la editorial de revisión
+  dudosa y porque no trata de la planta entera; las páginas de Wisconsin y
+  la ficha `spathiphyllum-wallisii` de NC State daban 404.
+- El artículo de BMC trata de enmiendas de suelo bajo déficit hídrico en
+  Egipto; se usa sólo por su descripción fisiológica del estrés hídrico, no
+  por sus recomendaciones de fertilización a campo.
+
+**D102 — Cómo se cortan los documentos** (2026-11-03, T1). Por sección `## `:
+una sección de 150–400 palabras es un chunk; las cortas se juntan con las
+siguientes del mismo documento mientras no pasen de 400; las largas se parten
+por párrafo. **Nunca se mezclan dos documentos en un chunk**, así que un
+documento entero corto (ASPCA, 76 palabras) es un chunk solo: mejor un
+fragmento chico que una cita con dos fuentes. Los documentos del proyecto
+(`rag/corpus/proyecto/`, 5 archivos) se redactaron en limpio desde CLAUDE.md,
+CALIBRACION.md, ENTREGA2.md y RESULTADOS.md, con el estado al 03/11 (placa
+sin datos desde el 29/10, firmware 2.0.0 con el árbol viejo); **si cambia el
+modelo o la placa, hay que actualizarlos y regenerar el índice**.
+
+**D103 — El historial sale de `plantaia_ml`, no de una reimplementación**
+(2026-11-03, T1). `serie_maceta01(snapshot, filtrado=False)` ya une
+`maceta-02`, remuestrea a 5 min, cruza con los episodios y calcula las
+features como la placa. **Un riego es una fila con `h_desde_riego == 0`**: es
+exactamente la regla del contrato (caída ≥ 250 mV de una lectura real, fuera
+del warm-up, con la sonda saturada como faltante). Sobre el snapshot del 03/11
+da los mismos cuatro riegos que RESULTADOS.md (07, 12 y 17/10 18:00 y 19/10
+22:40 UTC). Además:
+
+- Min/media/máx de la sonda **sin** los bins saturados ni la primera hora tras
+  cada arranque (el transitorio de la sonda inflaría el máximo del día).
+- Las notas de `episodios.csv` se recortan a 70 palabras, en el chunk del día
+  y en el del episodio (algunas tienen más de 100 y un día puede tocar tres
+  episodios). Lo que se pierde es sobre todo el detalle de números de
+  muestra, que no aporta a una respuesta; la nota completa sigue en el CSV.
+- Los episodios dudosos (`EPISODIOS_DUDOSOS`) se marcan como tales en el
+  texto, con el motivo, para que Ruperto no los cuente como hechos firmes.
+- Los días sin datos no tienen chunk (los huecos quedan como huecos). Hora de
+  Montevideo (UTC−3, sin horario de verano). Resultado: 31 días y 28
+  episodios = 59 chunks.
+
+**D104 — Embeddings a 768 dimensiones** (2026-11-03, T1).
+`gemini-embedding-001` admite reducir la dimensión (Matryoshka) y 768 es una
+de las recomendadas: el índice ocupa 270 KB en vez de 1 MB, con 89 chunks
+sobra. Con dimensión reducida Gemini no normaliza, así que se normaliza al
+escribir. Lotes de 20 textos con 1 s de pausa y reintento ante 429 con espera
+de 5, 10, 20… s (plan gratuito). **La consulta usa `RETRIEVAL_QUERY` y la
+`dim` de `meta.json`** (revisión de §4).
+
+**D105 — Sin clave no se escribe nada; con error tampoco** (2026-11-03, T1).
+La clave sale del entorno o de `--env-file` (por defecto el `.env` de la raíz,
+que está en `.gitignore`); nunca se imprime. Sin clave el script sale con
+código 2 y un mensaje. Todos los embeddings se calculan antes de escribir, y
+la escritura va a una carpeta temporal que reemplaza a la vieja: un corte a
+mitad de camino deja el índice anterior intacto (hay un test para cada caso).
+
+**D106 — El snapshot del 03/11 sólo agrega 3 filas** (2026-11-03, T1).
+`data/mediciones_raw_2026-11-03.csv` = el del 23/10 + 3 filas del 29/10
+(21:02–21:12 UTC, firmware 2.0.0). Entre el 22/10 21:34 y el 29/10 21:02 la
+base no tiene nada. Revisión de §1: "la base tiene datos hasta el 29/10" es
+cierto, pero la serie útil termina el 22/10; el historial de Ruperto cubre del
+11/09 al 22/10 más ese día suelto del 29/10. `SNAPSHOT_VIGENTE` no cambia (D11).
+
 ---
 
 ## 3. Arquitectura
@@ -195,6 +285,25 @@ Cada chunk:
   (`<fuente>/<documento>#<n>`).
 - Sin `GEMINI_API_KEY` el script falla con un mensaje claro; no escribe un
   índice a medias.
+
+**Revisión del 2026-11-03 (T1, D104–D105)** — lo que el contrato no fijaba:
+
+- Ids: `<n>` arranca en 0. Historial: `historial/dia-YYYY-MM-DD#0` y
+  `historial/episodio-<id>#0`. Orden de las filas: ciencia, historial (días
+  y después episodios), proyecto.
+- `meta.json` agrega `task_type` (`RETRIEVAL_DOCUMENT`) y `n`. `dim` es **768**
+  (no los 3072 por defecto de `gemini-embedding-001`).
+- **La consulta tiene que embeberse con el mismo `modelo_embed` y la misma
+  `dim` de `meta.json`, con `task_type=RETRIEVAL_QUERY`, y normalizarse**; si
+  no, el coseno no significa nada. `recuperar.py` los lee de `meta.json`, no
+  de una constante.
+- Lo que se embebe es `titulo + "\n\n" + texto`; `texto` queda limpio en el
+  chunk.
+- `fecha` vale `null` en `ciencia` y `proyecto` (la fecha de acceso de cada
+  fuente está en la cabecera del `.md`).
+- En `ciencia` el texto está en inglés, el idioma original (D101).
+- Hay chunks de menos de 150 palabras cuando el documento entero es más corto
+  (ASPCA) o cuando juntarlo con el siguiente pasaría de 400 (D102).
 
 Interfaz que lo lee (`backend/app/bot/recuperar.py`):
 
