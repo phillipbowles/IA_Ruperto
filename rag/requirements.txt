@@ -1,0 +1,9 @@
+# Entorno con el que se generó backend/app/bot/indice/ (Python 3.12).
+# numpy/pandas iguales a ml/requirements.txt: el historial usa plantaia_ml.
+numpy==2.1.3
+pandas==2.2.3
+scipy==1.15.3
+scikit-learn==1.6.1
+google-genai==2.34.0
+tzdata==2026.6
+pytest==8.3.4
