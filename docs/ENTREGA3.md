@@ -138,6 +138,8 @@ toxicidad, artículos open access). Cada documento lleva URL, institución y
 fecha de acceso en su cabecera; se guarda el texto limpio relevante, no la
 página entera. Ruperto cita la fuente cuando la usa.
 
+### Decisiones del corpus y el índice (T1)
+
 **D101 — Las 9 fuentes científicas del corpus** (2026-11-03, T1). En
 `rag/corpus/ciencia/`, con institución, URL y fecha de acceso (todas bajadas y
 verificadas el 03/11):
@@ -226,6 +228,95 @@ mitad de camino deja el índice anterior intacto (hay un test para cada caso).
 base no tiene nada. Revisión de §1: "la base tiene datos hasta el 29/10" es
 cierto, pero la serie útil termina el 22/10; el historial de Ruperto cubre del
 11/09 al 22/10 más ese día suelto del 29/10. `SNAPSHOT_VIGENTE` no cambia (D11).
+### Decisiones del bot (T2)
+
+**D201 — `python-telegram-bot` ≥ 21 por polling, handlers finos**
+(2026-11-03). Es la librería asíncrona más usada y mantenida, con polling
+listo (`run_polling`) y sin servidor web. Los handlers (`telegram_bot.py`) sólo
+abren una sesión, llaman a `responder`/`comando` y mandan el texto; toda la
+lógica se testea sin Telegram. Se manda **texto plano** (sin `parse_mode`): el
+Markdown que a veces devuelve Gemini rompe el parseo de Telegram con un `_`
+suelto. `python -m app.bot` verifica `TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY` y
+`DATABASE_URL` antes de importar nada y sale con código 2 y la lista de lo que
+falta.
+
+**D202 — La regla vigente y `h_desde_riego` se recalculan en Python puro**
+(2026-11-03). La imagen de producción del backend no tiene pandas, así que
+`modelo.py` reimplementa sólo la parte del contrato de ENTREGA2.md §4 que
+hace falta (tramos por `boot_id` y huecos > 7,5 min, ventana de 12 muestras,
+caída ≥ 250 mV de una lectura real, riego conservado entre tramos, tope 96 h,
+sonda saturada = faltante). Un test de paridad lo compara contra
+`ml/plantaia_ml/features.py` sobre una serie sintética con huecos, reinicios y
+faltantes. La serie que se recorre son las ~97 h previas a la última muestra
+(tope + 1 h de warm-up). La regla se recorre desde `modelo_placa.json`
+(`x ≤ umbral` → `si`, como sklearn); si falta `suelo_mv` **no se evalúa** (la
+placa tampoco inventa datos) y el contexto dice por qué (saturada o sin
+lectura).
+
+**D203 — Las ventanas del contexto se cuentan hasta la última muestra, no
+hasta el reloj** (2026-11-03). Con la placa caída, "últimas 24 h" contadas
+desde ahora darían vacío y Ruperto no tendría nada que contar. Se cuentan
+hasta la última muestra y el bloque ESTADO dice la edad y, si pasa de 60 min,
+`SENSORES CAÍDOS` y que los valores no son de ahora (§5.1).
+
+**D204 — Fuentes del índice por intención** (2026-11-03), concretando §5.2:
+`estado` → historial + proyecto; `riego` → historial + ciencia; `cuidados` →
+ciencia; `recomendacion` → ciencia + historial; `historial` → historial;
+`modelo` → proyecto; `saludo` → no busca; `otro` → todas. k = 5. Si la
+búsqueda falla (índice ausente o roto, 429 del embedding, dimensión distinta)
+se contesta igual, sin fragmentos, y queda en el log.
+
+**D205 — La consulta se embebe con el modelo y la dimensión del índice**
+(2026-11-03). `recuperar.buscar` usa `meta.json` (`modelo_embed`, `dim` como
+`output_dimensionality`), no `GEMINI_MODELO_EMBED`: vectores de otro modelo no
+son comparables con los del índice. Si la variable difiere, se avisa en el log.
+`task_type` = `RETRIEVAL_QUERY` (D4).
+
+**D206 — `/estado` y `/riego` no usan el LLM** (2026-11-03). Contestan con los
+mismos textos de `avisos.py` (armados desde el contexto SQL): no gastan cupo y
+funcionan con Gemini caído. `/start`, `/silencio` y `/ayuda` son textos fijos de
+`persona.py`. Todos se loguean en `conversaciones` con `modelo = "sin-llm"`.
+El rechazo fuera de dominio es uno de tres textos fijos en personaje.
+
+**D207 — Guardrail sin tope de tokens y con razonamiento bajo** (2026-11-03).
+La prueba manual con Gemini real mostró que con `max_output_tokens=200` el
+guardrail fallaba siempre: en `gemini-3-flash-preview` el tope incluye los
+tokens de razonamiento (~190) y el JSON salía cortado (`MAX_TOKENS`). Se saca
+el tope y se pide `thinking_level=LOW` en la familia gemini-3. El plan
+gratuito da **5 pedidos por minuto** por modelo y cada pregunta en dominio
+gasta 2 (guardrail + generación): ~2 preguntas por minuto. La evaluación (T4)
+tiene que espaciar las preguntas (~25 s) o usar una clave con más cupo.
+
+**D208 — Avisos: sin datos frescos no se pide agua; un riego reinicia el
+antirrebote** (2026-11-03), concretando §6. `necesita_riego` da falso con los
+sensores caídos (serían datos viejos; el aviso de 30 min ya dice que están
+caídos). El antirrebote de 6 h por chat se saltea si hubo un riego después del
+último aviso (se volvió a secar). Umbral de marchita: 1940 mV (la regla corta
+en 1939,88).
+
+**D209 — El servicio `bot` en el compose va en el perfil `bot`; en Railway,
+una sola réplica sin dominio** (2026-11-03). `docker compose up` sigue igual;
+`docker compose --profile bot up` lo suma. El bot usa el mismo entrypoint que
+el backend (`alembic upgrade head` antes de arrancar): es seguro porque
+`alembic/env.py` ya toma un advisory lock, así que si los dos servicios
+arrancan juntos migra uno solo. Para Railway (lo hace la sesión padre): mismo
+repo y Dockerfile (`target prod`), start command `python -m app.bot`, 1
+réplica, sin dominio público, variables de §5.6 más `DATABASE_URL`
+referenciada a la del Postgres.
+
+**D210 — `backend/app/bot/modelo_placa.json` es copia exacta del del front**
+(2026-11-03). El exportador ahora escribe los dos (D8). Se corrió y regeneró
+todo idéntico salvo `"fecha"` (la del día de la corrida); para no tocar el
+firmware ni el front fuera de este ticket, se dejaron como estaban y el JSON
+del bot es el del front byte a byte (un test lo verifica).
+
+**Revisión de §3 y §5.5 (2026-11-03, T2).** `Respuesta` suma `error` (null si
+salió bien). `responder` acepta además, por palabra clave, `gemini`, `buscar`,
+`ahora` y `memoria` (inyección para tests y evaluación); los comandos pasan por
+`comando(nombre, chat_id, db, usuario)`. En `conversaciones`, `en_dominio` y
+`intencion` son **nullable** (null = no se llegó a clasificar: 429 o error) y
+no hay FK a `chats_telegram` (se puede hablar sin `/start`). La memoria corta
+es por proceso: un redeploy la vacía (el log persistente sigue en la base).
 
 ---
 
