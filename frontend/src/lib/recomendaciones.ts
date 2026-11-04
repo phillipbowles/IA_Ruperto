@@ -62,9 +62,9 @@ export function recomendar(estado: Clase, s: Sensores | null, fotoDeAhora: boole
       ? { nivel: "accion", titulo: "Tocá el sustrato antes de decidir",
           detalle: "Si está seco a 2–3 cm, regá hasta que drene por abajo. Si está húmedo, no riegues: corré la maceta "
             + "a un lugar con luz indirecta y lejos de fuentes de calor.",
-          porque: `La foto muestra la planta caída; ${motivo}.` }
+          porque: `La foto muestra a Ruperto caído; ${motivo}.` }
       : { nivel: "ok", titulo: "No hace falta hacer nada",
-          detalle: "La planta se ve turgente.",
+          detalle: "Ruperto se ve turgente.",
           porque: `Sólo la foto: ${motivo}.` });
     return recs;
   }
@@ -78,39 +78,39 @@ export function recomendar(estado: Clase, s: Sensores | null, fotoDeAhora: boole
 
   if (caida) {
     if (frio) {
-      recs.push({ nivel: "accion", titulo: "Llevala a un lugar más templado",
-        detalle: "Por debajo de ~12 °C el lirio de paz se marchita aunque tenga agua. No la riegues hasta que se "
+      recs.push({ nivel: "accion", titulo: "Llevalo a un lugar más templado",
+        detalle: "Por debajo de ~12 °C el lirio de paz se marchita aunque tenga agua. No lo riegues hasta que se "
           + "recupere: con frío el sustrato tarda en secarse y las raíces se pudren.",
-        porque: `La foto la muestra caída y el aire está a ${fmt(s.temp_c!, 1)} °C.` });
+        porque: `La foto lo muestra caído y el aire está a ${fmt(s.temp_c!, 1)} °C.` });
     }
     if (suelo === "seco") {
-      recs.push({ nivel: "accion", titulo: "Regala",
+      recs.push({ nivel: "accion", titulo: "Regalo",
         detalle: "Riego abundante hasta que salga agua por abajo, y tirá lo que quede en el plato. Las hojas "
           + "deberían levantarse en 2 a 6 horas.",
-        porque: `La foto la muestra caída y la sonda marca el sustrato seco (${sueloTxt}).` });
+        porque: `La foto lo muestra caído y la sonda marca el sustrato seco (${sueloTxt}).` });
     }
     if (suelo !== "seco" && luzFuerte) {
-      recs.push({ nivel: "accion", titulo: "Correla a un lugar más cubierto",
+      recs.push({ nivel: "accion", titulo: "Correlo a un lugar más cubierto",
         detalle: "Luz indirecta: a un par de metros de la ventana o detrás de una cortina. Con sol directo "
           + "transpira más de lo que las raíces alcanzan a absorber, aunque tenga agua.",
-        porque: `Está caída con el sustrato ${suelo === "humedo" ? "húmedo" : "todavía con agua"} (${sueloTxt}) `
+        porque: `Está caído con el sustrato ${suelo === "humedo" ? "húmedo" : "todavía con agua"} (${sueloTxt}) `
           + `y en las últimas 6 h la luz llegó a ${fmt(s.luz_max_6h!)} mV (sol directo).` });
     }
     if (calor) {
-      recs.push({ nivel: "accion", titulo: "Alejala del calor",
+      recs.push({ nivel: "accion", titulo: "Alejalo del calor",
         detalle: "Lejos de radiadores, estufas y aire caliente. Si el aire está seco, pulverizá las hojas o poné "
           + "la maceta sobre un plato con piedras y agua.",
         porque: `Temperatura ${s.temp_c !== null ? `${fmt(s.temp_c, 1)} °C` : "—"}`
           + `${v !== null ? `, déficit de presión de vapor ${fmt(v, 1)} kPa` : ""}: el aire le saca agua rápido.` });
     }
     if (suelo === "humedo" && !luzFuerte && !calor && !frio) {
-      recs.push({ nivel: "atencion", titulo: "No la riegues: el sustrato está húmedo",
+      recs.push({ nivel: "atencion", titulo: "No lo riegues: el sustrato está húmedo",
         detalle: "Con el sustrato mojado y sin calor ni sol fuerte, el decaimiento puede venir del exceso de agua. "
           + "Fijate que la maceta drene y que no quede agua en el plato; si sigue así, revisá las raíces.",
-        porque: `La foto la muestra caída pero la sonda marca húmedo (${sueloTxt}).` });
+        porque: `La foto lo muestra caído pero la sonda marca húmedo (${sueloTxt}).` });
     }
     if (recs.length === 0) {
-      recs.push({ nivel: "atencion", titulo: "Revisala en unas horas",
+      recs.push({ nivel: "atencion", titulo: "Revisalo en unas horas",
         detalle: "Ningún sensor explica el decaimiento. Puede ser un cambio reciente (riego, traslado); "
           + "volvé a sacarle una foto más tarde.",
         porque: `Sustrato ${suelo ?? "sin dato"}, sin sol fuerte, frío ni calor.` });
@@ -118,12 +118,12 @@ export function recomendar(estado: Clase, s: Sensores | null, fotoDeAhora: boole
   } else {
     if (suelo === "seco") {
       recs.push({ nivel: "atencion", titulo: "Va a necesitar riego pronto",
-        detalle: "Todavía está turgente, pero el sustrato ya está seco: regala hoy o mañana.",
+        detalle: "Todavía está turgente, pero el sustrato ya está seco: regalo hoy o mañana.",
         porque: `La sonda marca ${sueloTxt}.` });
     }
     if (luzFuerte) {
       recs.push({ nivel: "atencion", titulo: "Vigilá el sol directo",
-        detalle: "Por ahora lo aguanta; si las hojas se ponen amarillas o con bordes secos, correla.",
+        detalle: "Por ahora lo aguanta; si las hojas se ponen amarillas o con bordes secos, correlo.",
         porque: `En las últimas 6 h la luz llegó a ${fmt(s.luz_max_6h!)} mV.` });
     }
     if (recs.length === 0) {

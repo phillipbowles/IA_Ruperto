@@ -21,13 +21,13 @@ Mientras hay tensión aplicada, los iones del agua migran hacia los electrodos (
 
 ## La corrosión y la deriva
 
-Los electrodos se corroen con las semanas y la escala de la sonda se encoge: la misma humedad real se lee distinto en la semana 3 que en la semana 1. La mediana de `suelo_mv` en los episodios de marchita fue de unos **2832 mV en septiembre**, **1954 mV del 03/10 al 18/10** y **1758 mV el 19/10**. Como la condición de la planta también cambia con el tiempo, esa deriva puede confundirse con una señal real; es el riesgo metodológico más serio del montaje.
+Los electrodos se corroen con las semanas y la escala de la sonda se encoge: la misma humedad real se lee distinto en la semana 3 que en la semana 1. La mediana de `suelo_mv` en los episodios de marchitez franca fue de unos **2832 mV en septiembre**, **1954 mV del 03/10 al 18/10** y **1758 mV el 19/10**. Como la condición de la planta también cambia con el tiempo, esa deriva puede confundirse con una señal real; es el riesgo metodológico más serio del montaje.
 
 La mitigación prevista es medir una vez por semana el par de referencia seco (sonda al aire) y mojado (sonda en un vaso de agua) y anotarlo en `docs/CALIBRACION.md`. Al 2026-11-03 esa tabla de calibración semanal sigue **pendiente**: no hay mediciones registradas.
 
 ## Valores de referencia en octubre
 
-Con la escala de octubre, del 03/10 al 18/10 el sustrato acompañó a la etiqueta en todos los episodios: saludable alrededor de 1500–1610 mV, estresada alrededor de 1840–1870 mV y marchita alrededor de 1940–1960 mV. Después de un riego baja a unos 1400–1520 mV.
+Con la escala de octubre, del 03/10 al 18/10 el sustrato acompañó a la etiqueta en todos los episodios: saludable alrededor de 1500–1610 mV, estresado alrededor de 1840–1870 mV y marchito alrededor de 1940–1960 mV. Después de un riego baja a unos 1400–1520 mV.
 
 `suelo_pct` (el porcentaje que muestra la pantalla) no está calibrado y no se usa para nada; el modelo usa `suelo_mv`.
 

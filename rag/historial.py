@@ -29,6 +29,10 @@ from plantaia_ml import DATOS
 from plantaia_ml.dataset import serie_maceta01
 from plantaia_ml.datos_reales import EPISODIOS_DUDOSOS, leer_episodios
 
+# Ruperto es varón: el texto dice cómo estaba él y deja la clase del modelo
+# entre paréntesis, para que el chunk no le enseñe a hablar en femenino (D215).
+COMO_ESTABA = {"saludable": "saludable", "estresada": "estresado", "marchita": "marchito"}
+
 ZONA = "America/Montevideo"
 MAX_PALABRAS_NOTA = 70
 
@@ -104,7 +108,8 @@ def texto_dia(dia: str, d: pd.DataFrame, ep: pd.DataFrame) -> str:
     for _, e in eps.iterrows():
         dud = " Episodio dudoso." if e.episodio_id in EPISODIOS_DUDOSOS else ""
         nota = _nota_corta(e.nota)
-        lineas.append(f"Episodio {e.episodio_id}: {e.clase} (origen {e.origen}), "
+        lineas.append(f"Episodio {e.episodio_id}: {COMO_ESTABA[e.clase]} (clase {e.clase}, "
+                      f"origen {e.origen}), "
                       f"de {_hora(e.ts_inicio)} a {_hora(e.ts_fin)}.{dud}"
                       + (f" Nota: {nota}" if nota else ""))
     return "\n".join(lineas)
@@ -113,7 +118,8 @@ def texto_dia(dia: str, d: pd.DataFrame, ep: pd.DataFrame) -> str:
 def texto_episodio(e: pd.Series, d: pd.DataFrame) -> str:
     dur = (e.ts_fin - e.ts_inicio).total_seconds() / 3600
     lineas = [
-        f"Episodio {e.episodio_id} de Ruperto: clase {e.clase}, origen {e.origen}.",
+        f"Episodio {e.episodio_id}: Ruperto estuvo {COMO_ESTABA[e.clase]} "
+        f"(clase {e.clase}, origen {e.origen}).",
         f"Desde {_hora(e.ts_inicio)} hasta {_hora(e.ts_fin)} (hora de Montevideo), "
         f"{_num(dur, 1)} h.",
     ]
@@ -152,6 +158,6 @@ def chunks_historial(snapshot: Path | str, episodios: Path | str = DATOS / "epis
         d = df[(df.ts >= e.ts_inicio) & (df.ts < e.ts_fin)]
         dia = e.ts_inicio.tz_convert(ZONA).strftime("%Y-%m-%d")
         out.append(Chunk(f"historial/episodio-{e.episodio_id}#0", "historial",
-                         f"Episodio {e.episodio_id} ({e.clase})", None, dia,
+                         f"Episodio {e.episodio_id} ({COMO_ESTABA[e.clase]})", None, dia,
                          texto_episodio(e, d)))
     return out

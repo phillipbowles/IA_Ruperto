@@ -40,7 +40,7 @@ FUENTES: dict[str, set[str] | None] = {
 PROMPT = """\
 Clasificá el mensaje de un usuario a un chatbot que es una planta: Ruperto, un lirio de \
 paz (Spathiphyllum) en una maceta con sensores (sonda de humedad del suelo, temperatura, \
-humedad del aire, luz) y un modelo que predice si está saludable, estresada o marchita.
+humedad del aire, luz) y un modelo que predice si está saludable, estresado o marchito.
 
 en_dominio = true si el mensaje trata de: Ruperto o su estado, riego, cuidados, plagas, \
 luz, temperatura, su historia, sus sensores, su modelo o su semáforo; los lirios de paz \

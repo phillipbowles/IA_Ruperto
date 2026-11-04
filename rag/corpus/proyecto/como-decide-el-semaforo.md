@@ -13,12 +13,14 @@ idioma: es
 
 El modelo final de la Tarea 2 se llama `regla-p3-f07-79b556`. Es una regla de cuatro pasos, que se aplica en este orden:
 
-| condición | clase | LED |
-|---|---|---|
-| pasaron 5,5 h o menos desde el último riego | estresada | amarillo (se está recuperando del riego) |
-| `suelo_mv` ≤ 1716 mV | saludable | verde |
-| `suelo_mv` ≤ 1940 mV | estresada | amarillo |
-| si no (más de 1940 mV) | marchita | rojo |
+| condición | clase del modelo | cómo está Ruperto | LED |
+|---|---|---|---|
+| pasaron 5,5 h o menos desde el último riego | `estresada` | estresado, recuperándose del riego | amarillo |
+| `suelo_mv` ≤ 1716 mV | `saludable` | saludable | verde |
+| `suelo_mv` ≤ 1940 mV | `estresada` | estresado | amarillo |
+| si no (más de 1940 mV) | `marchita` | marchito | rojo |
+
+Las clases del modelo (`saludable`, `estresada`, `marchita`) son nombres internos del firmware y de los datos; Ruperto, que es varón, dice "estresado" y "marchito".
 
 Se exporta como un árbol de decisión de 7 nodos que ocupa 111 bytes en la placa y decide con a lo sumo 3 comparaciones, en menos de un microsegundo. La predicción se calcula en la placa cada 5 minutos y no depende del WiFi.
 
@@ -26,13 +28,13 @@ Se exporta como un árbol de decisión de 7 nodos que ocupa 111 bytes en la plac
 
 Las "horas desde el riego" (`h_desde_riego`) se calculan así: si la sonda cae **250 mV o más** entre dos muestras seguidas, con una lectura real (no repetida) y con al menos una hora de historia en la ventana (fuera del warm-up tras un arranque), se guarda la hora de esa muestra como último riego. La placa la guarda en su memoria permanente, así que un reinicio no la olvida. Si no hubo riego o fue hace más de 96 horas, vale 96.
 
-La regla del riego existe porque, después de regar, el sustrato se moja en minutos pero la planta tarda horas en recuperar la turgencia: durante esas horas sigue `estresada` aunque la sonda ya diga húmedo.
+La regla del riego existe porque, después de regar, el sustrato se moja en minutos pero Ruperto tarda horas en recuperar la turgencia: durante esas horas sigue estresado (clase `estresada`) aunque la sonda ya diga húmedo.
 
 ## Cuánto acierta
 
 Se evaluó partiendo por episodios de etiqueta (no por filas, porque las muestras contiguas están correlacionadas y un split aleatorio da ~98 % por pura fuga). Con 20 episodios sin los dudosos:
 
-- **F1 macro 0,858 ± 0,049**, exactitud balanceada 0,860, recall de marchita 0,77.
+- **F1 macro 0,858 ± 0,049**, exactitud balanceada 0,860, recall de `marchita` 0,77.
 - Le gana a la regla de dos umbrales sobre la sonda sola en el 98 % de las remuestras por episodio, y a un árbol de decisión en el 99 %.
 - Con todos los episodios, incluidos los dudosos, el F1 macro baja a 0,795.
 - Ninguna `saludable` se confunde con `marchita` ni al revés: los errores son entre clases vecinas.

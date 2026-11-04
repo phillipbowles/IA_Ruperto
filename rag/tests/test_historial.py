@@ -37,7 +37,7 @@ def test_resumen_diario(snapshot_chico, episodios_chico):
     assert "mín 1500" in d7 and "máx 1900" in d7
     assert "Riegos detectados (caída de la sonda ≥ 250 mV): 07/10 15:00." in d7
     assert "Riegos detectados: ninguno." in d8
-    assert "Episodio 1: estresada (origen manual)" in d7 and "Sustrato seco" in d7
+    assert "Episodio 1: estresado (clase estresada, origen manual)" in d7 and "Sustrato seco" in d7
     assert "Episodio 2: saludable" in d7 and "Episodio 2: saludable" in d8
     assert "Temperatura del aire (DHT11): mín 20,0" in d7
 
@@ -47,7 +47,7 @@ def test_un_chunk_por_episodio(snapshot_chico, episodios_chico):
     eps = [c for c in cs if c.id.startswith("historial/episodio-")]
     assert [c.id for c in eps] == ["historial/episodio-1#0", "historial/episodio-2#0"]
     e1, e2 = eps
-    assert e1.fecha == "2026-10-07" and e1.titulo == "Episodio 1 (estresada)"
+    assert e1.fecha == "2026-10-07" and e1.titulo == "Episodio 1 (estresado)"
     assert "6,0 h" in e1.texto and "Muestras a 5 min: 72" in e1.texto
     assert "Riegos detectados en el episodio: ninguno" in e1.texto
     assert "07/10 15:00" in e2.texto

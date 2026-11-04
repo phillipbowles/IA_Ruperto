@@ -131,11 +131,17 @@ Es el punto débil conocido del montaje y condiciona varias decisiones:
 **Tres clases.** Los nombres del firmware son los canónicos; la columna de la
 derecha es el vocabulario botánico que va en el informe:
 
-| código | etiqueta | equivale a |
-|---|---|---|
-| 1 | `saludable` | turgente |
-| 2 | `estresada` | marchitez transitoria |
-| 3 | `marchita` | marchitez franca |
+| código | etiqueta | equivale a | cómo se muestra |
+|---|---|---|---|
+| 1 | `saludable` | turgente | Saludable |
+| 2 | `estresada` | marchitez transitoria | Estresado |
+| 3 | `marchita` | marchitez franca | Marchito |
+
+Las etiquetas son **identificadores** (firmware, base, CSV, modelo, tests) y no
+se cambian: van en femenino porque se refieren a "la planta". Todo texto que
+lee una persona y habla de la planta como Ruperto (el bot, el front, el corpus
+RAG) usa la columna "cómo se muestra": **Ruperto es varón**. Detalle en
+docs/ENTREGA3.md, D215.
 
 `sin_etiquetar` (código 0) **no es una clase**: es ausencia de etiqueta y se
 **excluye del entrenamiento**. Nunca entra al `fit` como categoría.

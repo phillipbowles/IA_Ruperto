@@ -375,6 +375,29 @@ bot, pruebas y conversaciones reales. No alcanza para la entrega. Opciones:
 otro modelo con más cupo diario (los `flash-lite`), el guardrail en un modelo
 distinto (cada modelo tiene su propio cupo) o habilitar facturación.
 
+**D215 — Ruperto es varón en todo lo que lee una persona** (2026-11-04,
+decisión del equipo). Las clases `saludable | estresada | marchita` **siguen
+siendo los identificadores** del firmware, la base, el CSV, el modelo
+exportado, los tests y el informe de la Tarea 2: cambiarlas rompería la
+ingesta y los datos históricos, y van en femenino porque se refieren a "la
+planta". Lo que cambia es cómo se muestran (tabla en CLAUDE.md):
+Saludable / Estresado / Marchito.
+
+- **Front**: etiquetas del avatar, del análisis de foto, del árbol, de la
+  calibración y de la torta; "Cómo está Ruperto ahora"; las recomendaciones
+  hablan de él ("Regalo", "No lo riegues", "lo muestra caído"). Las claves de
+  código y las clases CSS (`lirio--marchita`) no cambian.
+- **Bot**: persona, bloque simple, `/estado`, `/riego` y el filtro de tema.
+- **Corpus RAG**: los documentos de `rag/corpus/proyecto/` dicen
+  "estresado/marchito" y dejan la clase del modelo entre backticks; los
+  chunks de historial dicen "Ruperto estuvo marchito (clase `marchita`)". Se
+  regeneró el índice (90 chunks).
+- **No se tocan**: docs/entrega2/ (entregado), ENTREGA2.md, ARQUITECTURA.md y
+  VISION_CLASICA.md (hablan de las clases como identificadores), data/,
+  notebooks/ y ml/. **El LCD de la placa** muestra el identificador
+  (`Pred:marchita`); pasarlo a masculino es un cambio de firmware que queda
+  para cuando se vuelva a flashear (pendiente, §8).
+
 ---
 
 ## 3. Arquitectura

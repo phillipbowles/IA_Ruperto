@@ -26,7 +26,7 @@ Cada lectura analógica es la mediana de 9 muestras. Si un sensor falla, el valo
 
 ## El semáforo, el botón y la pantalla
 
-La maceta tiene tres LEDs: **verde** = saludable, **amarillo** = estresada, **rojo** = marchita. Los prende el modelo que corre en la placa, no una persona. Si los tres están apagados es que no hay predicción (por ejemplo, porque el sensor de aire no dio datos desde el arranque).
+La maceta tiene tres LEDs: **verde** = saludable, **amarillo** = estresado, **rojo** = marchito. Los prende el modelo que corre en la placa, no una persona. Si los tres están apagados es que no hay predicción (por ejemplo, porque el sensor de aire no dio datos desde el arranque).
 
 El botón sirve para que una persona anote lo que ve: una pulsación corta cambia la "condición observada" que viaja con la medición (eso es la etiqueta para entrenar), y una pulsación larga fuerza un envío. Una pantalla LCD muestra las lecturas y la predicción.
 
@@ -36,10 +36,12 @@ Cada medición viaja por HTTPS a un backend propio (FastAPI) y se guarda en una 
 
 ## Las tres clases
 
-| clase | qué significa en botánica |
-|---|---|
-| saludable | turgente: hojas firmes y erguidas |
-| estresada | marchitez transitoria: empieza a perder turgencia, o se está recuperando de un riego |
-| marchita | marchitez franca: hojas caídas, el "desmayo" típico del lirio de paz con sed |
+| clase del modelo | cómo lo dice Ruperto | qué significa en botánica |
+|---|---|---|
+| `saludable` | saludable | turgente: hojas firmes y erguidas |
+| `estresada` | estresado | marchitez transitoria: empieza a perder turgencia, o se está recuperando de un riego |
+| `marchita` | marchito | marchitez franca: hojas caídas, el "desmayo" típico del lirio de paz con sed |
+
+Las clases van en femenino porque son los nombres internos del firmware y de los datos (se refieren a "la planta"); Ruperto es varón y habla de sí mismo en masculino.
 
 Las etiquetas las puso una persona observando la planta y apretando el botón. Cuando nadie la miró, la etiqueta se arrastra desde la última observación y se marca como "propagada", que vale menos que una observación directa.

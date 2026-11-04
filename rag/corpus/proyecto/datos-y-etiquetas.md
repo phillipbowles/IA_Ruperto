@@ -26,8 +26,8 @@ La etiqueta no se guarda fila por fila sino como **episodios**: intervalos de ti
 - **12 al 17/09**: primeras mediciones. El 15 y el 16/09 la maceta estuvo sobre un radiador (hasta 35,6 °C y ~23 % de humedad del aire, la condición más exigente de todo el registro).
 - **17/09 al 01/10**: hueco de dos semanas sin datos.
 - **01 al 03/10**: episodios 8 a 10.
-- **03 al 18/10**: tres ciclos casi iguales de unos 5 días: saludable → estresada (el sustrato se seca) → marchita (unas 12 h, de día) → riego a las 18:00 UTC → estresada unas 5–6 h de recuperación → saludable. Ambiente estable: 18,5–21,3 °C y 44–55 % de humedad del aire.
-- **18 al 22/10**: episodios 11 a 15, con la marchita nocturna del 19/10 y el riego de ese día a las 22:41 UTC.
+- **03 al 18/10**: tres ciclos casi iguales de unos 5 días: saludable → estresado (el sustrato se seca) → marchito (unas 12 h, de día) → riego a las 18:00 UTC → estresado unas 5–6 h de recuperación → saludable. Ambiente estable: 18,5–21,3 °C y 44–55 % de humedad del aire.
+- **18 al 22/10**: episodios 11 a 15, con el marchitamiento nocturno del 19/10 y el riego de ese día a las 22:41 UTC.
 - **22/10**: se flasheó el firmware 2.0.0 (con el modelo en la placa).
 - **Hasta el 29/10 21:12 UTC**: última muestra recibida.
 
