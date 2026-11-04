@@ -135,6 +135,13 @@ def cargar_regla(ruta: Path = RUTA_MODELO) -> Regla:
                  nodos=tuple(datos["nodos"]))
 
 
+def umbrales_suelo(regla: Regla | None = None) -> tuple[float, ...]:
+    """Cortes de `suelo_mv` de la regla, de menor a mayor: en palabras, húmeda
+    hasta el primero, secándose hasta el segundo, muy seca después."""
+    regla = regla or cargar_regla()
+    return tuple(sorted(n["umbral"] for n in regla.nodos if n.get("feature") == "suelo_mv"))
+
+
 def _num(v: float) -> str:
     return f"{v:g}"
 

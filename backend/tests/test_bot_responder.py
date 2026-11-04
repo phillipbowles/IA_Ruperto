@@ -34,23 +34,27 @@ def test_punta_a_punta_en_dominio(db):
     g, b, mem = GeminiFalso(intencion="riego"), buscador(FRAG), prompt.Memoria()
     ahora = filas[-1].ts_dispositivo + timedelta(minutes=2)
     r = correr(responder("¿cuándo te regaron?", 42, db, gemini=g, buscar=b, ahora=ahora, memoria=mem))
-    assert r.texto == "Soy Ruperto [1]." and r.en_dominio and r.intencion == "riego"
+    # El [1] sale del texto y la fuente científica citada va al pie (D211).
+    assert r.texto == "Soy Ruperto.\n\n📚 Fuente: Universidad de Florida (UF/IFAS)"
+    assert r.en_dominio and r.intencion == "riego" and r.citados == ["ciencia/ufifas#3"]
     assert r.fragmentos == [("ciencia/ufifas#3", 0.83)] and r.modelo == "gemini-falso"
     assert b.llamadas == [("¿cuándo te regaron?", 5, {"historial", "ciencia"})]
     system, contenidos = g.llamadas_generar[0]
     assert system == persona.SYSTEM
     turno = contenidos[-1]["text"]
     assert "1500 mV" in turno and "[1] fuente: ciencia — UF/IFAS" in turno
+    assert turno.startswith("EN PALABRAS SIMPLES") and "Tierra: húmeda." in turno
     assert turno.endswith("¿cuándo te regaron?")
     # Logueado (D9) y en la memoria corta.
     log = db.query(Conversacion).one()
     assert (log.chat_id, log.pregunta, log.en_dominio, log.intencion) == (42, "¿cuándo te regaron?", True, "riego")
-    assert log.fragmentos == [{"id": "ciencia/ufifas#3", "score": 0.83}] and log.error is None
+    assert log.fragmentos == [{"id": "ciencia/ufifas#3", "score": 0.83, "citado": True}]
+    assert log.error is None
     assert log.latencia_ms >= 0
-    assert mem.historial(42)[-1]["text"] == "Soy Ruperto [1]."
+    assert mem.historial(42)[-1]["text"] == "Soy Ruperto."
     # El turno siguiente lleva la conversación anterior.
     correr(responder("¿y ahora?", 42, db, gemini=g, buscar=b, ahora=ahora, memoria=mem))
-    assert [c["text"] for c in g.llamadas_generar[1][1][:2]] == ["¿cuándo te regaron?", "Soy Ruperto [1]."]
+    assert [c["text"] for c in g.llamadas_generar[1][1][:2]] == ["¿cuándo te regaron?", "Soy Ruperto."]
 
 
 def test_fuera_de_dominio_no_genera(db):
@@ -92,7 +96,7 @@ def test_error_de_gemini_o_de_busqueda(db):
     def rota(*a):
         raise RuntimeError("índice roto")
     r = correr(responder("¿tenés sed?", 1, db, gemini=GeminiFalso(), buscar=rota))
-    assert r.texto == "Soy Ruperto [1]." and r.fragmentos == []      # contesta sin fragmentos
+    assert r.texto == "Soy Ruperto." and r.fragmentos == []      # contesta sin fragmentos
 
 
 def test_comandos_suscripcion(db):

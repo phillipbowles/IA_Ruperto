@@ -7,6 +7,7 @@ memoria del proceso: el log persistente es la tabla `conversaciones`).
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict, deque
 
 from . import persona
@@ -35,11 +36,49 @@ def texto_fragmentos(fragmentos: list[Fragmento]) -> str:
     return "\n\n".join(bloques)
 
 
-def turno_usuario(estado: str, dias: str, fragmentos: list[Fragmento], pregunta: str) -> str:
-    return (f"ESTADO ACTUAL\n{estado}\n\n"
+def turno_usuario(estado: str, dias: str, fragmentos: list[Fragmento], pregunta: str,
+                  simple: str = "") -> str:
+    simple = f"EN PALABRAS SIMPLES\n{simple}\n\n" if simple else ""
+    return (f"{simple}ESTADO ACTUAL\n{estado}\n\n"
             f"ÚLTIMOS 7 DÍAS\n{dias}\n\n"
             f"FRAGMENTOS\n{texto_fragmentos(fragmentos)}\n\n"
             f"PREGUNTA\n{pregunta}")
+
+
+# ─── citas (D211) ─────────────────────────────────────────────────────────
+# Los [n] sirven para trazar qué fragmento usó cada respuesta (quedan en el log),
+# pero en Telegram el usuario no ve los fragmentos: se sacan del texto y las
+# fuentes científicas citadas van al pie, con el nombre de la institución.
+INSTITUCIONES = {
+    "ufifas": "Universidad de Florida (UF/IFAS)",
+    "ncstate": "NC State Extension",
+    "rhs": "Royal Horticultural Society",
+    "aspca": "ASPCA",
+    "bmc": "BMC Plant Biology (2024)",
+}
+_CITA = re.compile(r"\s*\[(\d+(?:\s*,\s*\d+)*)\]")
+
+
+def _institucion(f: Fragmento) -> str:
+    doc = f.id.split("/", 1)[-1].split("#", 1)[0]
+    return INSTITUCIONES.get(doc.split("-", 1)[0], f.titulo)
+
+
+def citas(texto: str, fragmentos: list[Fragmento]) -> tuple[str, set[int]]:
+    """Saca los [n] del texto y agrega el pie con las fuentes científicas
+    citadas. Devuelve el texto final y los índices (desde 0) citados."""
+    citados: set[int] = set()
+    for m in _CITA.finditer(texto):
+        citados |= {int(n) - 1 for n in m.group(1).split(",")
+                    if 0 < int(n) <= len(fragmentos)}
+    limpio = _CITA.sub("", texto).strip()
+    fuentes = []
+    for i in sorted(citados):
+        if fragmentos[i].fuente == "ciencia" and (inst := _institucion(fragmentos[i])) not in fuentes:
+            fuentes.append(inst)
+    if fuentes:
+        limpio += "\n\n📚 Fuente: " + ", ".join(fuentes)
+    return limpio, citados
 
 
 class Memoria:

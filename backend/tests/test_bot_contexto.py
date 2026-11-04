@@ -59,4 +59,43 @@ def test_otro_dispositivo_no_se_mezcla(db, monkeypatch):
     ctx = contexto.armar_contexto(db, ahora=T0 + timedelta(hours=2))
     assert ctx.dispositivo == "maceta-01" and ctx.ultima.suelo_mv == 1800.0
     monkeypatch.setenv("BOT_DISPOSITIVO", "otra")
-    assert contexto.armar_contexto(db, ahora=T0).ultima.suelo_mv == 1500.0
+    assert contexto.armar_contexto(db, ahora=T0 + timedelta(hours=2)).ultima.suelo_mv == 1500.0
+
+
+def test_palabras_simples_en_masculino():
+    from app.bot import modelo
+    assert modelo.umbrales_suelo()[0] == 1716.0 and 1939 < modelo.umbrales_suelo()[1] < 1941
+    assert [contexto.tierra_simple(v) for v in (1500, 1716, 1800, 2000, None)] == \
+        ["húmeda", "húmeda", "secándose", "muy seca", None]
+    assert contexto.aire_simple(10, 60) == "fresco" and contexto.aire_simple(30, 30) == "caluroso y seco"
+
+
+def test_texto_simple_marchito_y_caido(db):
+    filas = cargar(db, [2000.0] * 20)
+    ctx = contexto.armar_contexto(db, ahora=filas[-1].ts_dispositivo + timedelta(minutes=2))
+    s = contexto.texto_simple(ctx)
+    assert "marchito" in s and "marchita" not in s and "Tierra: muy seca." in s
+    assert "No sé cómo estoy AHORA" not in s
+    caido = contexto.texto_simple(contexto.armar_contexto(db, ahora=filas[-1].ts_dispositivo
+                                                          + timedelta(days=2)))
+    assert caido.startswith("- No sé cómo estoy AHORA")
+
+
+def test_texto_simple_recien_regado(db):
+    filas = cargar(db, [1900.0] * 24 + [1500.0] * 12)
+    ctx = contexto.armar_contexto(db, ahora=filas[-1].ts_dispositivo)
+    assert "recuperándome de un riego reciente" in contexto.texto_simple(ctx)
+
+
+def test_el_reloj_inyectado_no_ve_el_futuro(db):
+    filas = cargar(db, [1500.0] * 12 + [2000.0] * 12)
+    ctx = contexto.armar_contexto(db, ahora=filas[11].ts_dispositivo)
+    assert ctx.ultima.suelo_mv == 1500.0 and ctx.ultima.edad_min == 0
+
+
+def test_maceta_02_es_la_misma_planta(db):
+    # Riego registrado como maceta-02 y después la placa vuelve como maceta-01 (D212).
+    cargar(db, [1950.0] * 13 + [1500.0] * 3, dispositivo="maceta-02")
+    cargar(db, [1520.0] * 3, dispositivo="maceta-01", t0=T0 + 16 * PASO)
+    ctx = contexto.armar_contexto(db, ahora=T0 + 19 * PASO)
+    assert ctx.ultimo_riego == T0 + 13 * PASO and ctx.ultima.suelo_mv == 1520.0

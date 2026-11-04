@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from .contexto import Contexto, local
+from .contexto import Contexto, aire_simple, local, tierra_simple
 from .modelo import RIEGO_TOPE_H
 
 UMBRAL_MARCHITA_MV = 1940        # §6: sonda por encima de esto = marchita (regla: 1939,88)
@@ -19,6 +19,8 @@ HORAS_SIN_RIEGO = 5.5            # §6 y primera rama de la regla
 ANTIRREBOTE = timedelta(hours=6)
 
 EMOJI = {"saludable": "🟢", "estresada": "🟡", "marchita": "🔴"}
+# Ruperto habla en masculino; las clases del modelo quedan como nombre interno (D211).
+ESTADO = {"saludable": "estoy bien", "estresada": "estoy algo caído", "marchita": "estoy marchito"}
 
 
 def _clase(ctx: Contexto) -> str | None:
@@ -48,19 +50,21 @@ def texto_medicion(ctx: Contexto) -> str:
                 f"{u.edad_min // 60} h). No sé cómo estoy ahora: ¿alguien puede revisar "
                 "que la placa esté enchufada?")
     clase = _clase(ctx)
-    partes = [f"{EMOJI.get(clase, '⚪')} {clase or 'sin predicción'} — {local(u.ts)}"]
-    suelo = f"{u.suelo_mv:.0f} mV" if u.suelo_mv is not None else "sin dato"
-    partes.append(f"Suelo: {suelo}, {_tendencia(ctx)}")
-    aire = []
-    if u.temp_c is not None:
-        aire.append(f"{u.temp_c:.1f} °C")
-    if u.hum_pct is not None:
-        aire.append(f"HR {u.hum_pct:.0f} %")
-    partes.append("Aire: " + (", ".join(aire) if aire else "sin dato"))
+    partes = [f"{EMOJI.get(clase, '⚪')} {ESTADO.get(clase, 'mi modelo no pudo decidir')} "
+              f"({local(u.ts)})"]
+    if u.suelo_mv is not None:
+        partes.append(f"Tierra: {tierra_simple(u.suelo_mv)} ({u.suelo_mv:.0f} mV, {_tendencia(ctx)})")
+    else:
+        partes.append("Tierra: sin dato")
+    aire = [x for x in (f"{u.temp_c:.1f} °C" if u.temp_c is not None else None,
+                        f"humedad {u.hum_pct:.0f} %" if u.hum_pct is not None else None) if x]
+    partes.append(f"Ambiente: {aire_simple(u.temp_c, u.hum_pct) or 'sin dato'}"
+                  + (f" ({', '.join(aire)})" if aire else ""))
     if u.luz_mv is not None:
         partes.append(f"Luz: {u.luz_mv:.0f} mV")
     if ctx.coinciden is False:
-        partes.append(f"(la placa dice {ctx.placa.clase}: corre {ctx.placa.modelo_version})")
+        partes.append(f"(la placa dice {ESTADO[ctx.placa.clase]}: todavía corre el modelo "
+                      f"{ctx.placa.modelo_version})")
     return "\n".join(partes)
 
 
@@ -90,13 +94,14 @@ def debe_avisar_riego(ctx: Contexto, ultimo_aviso: datetime | None, ahora: datet
 
 def texto_aviso_riego(ctx: Contexto) -> str:
     u = ctx.ultima
-    suelo = f"{u.suelo_mv:.0f} mV" if u and u.suelo_mv is not None else "muy alta"
+    suelo = f"la tierra está muy seca ({u.suelo_mv:.0f} mV)" if u and u.suelo_mv is not None \
+        else "la tierra está muy seca"
     if ctx.h_desde_riego >= RIEGO_TOPE_H:
         desde = "hace más de 4 días que nadie me riega"
     else:
         desde = f"me regaron hace {ctx.h_desde_riego:.0f} h"
-    return (f"🔴 ¡Agua, por favor! Me estoy desmayando: la sonda marca {suelo} y {desde}. "
-            "Un buen riego y en unas horas resucito.")
+    return (f"🔴 ¡Agua, por favor! Me estoy desmayando: {suelo} y {desde}. "
+            "Regame hasta que drene por abajo y en unas horas resucito.")
 
 
 def texto_riego(ctx: Contexto) -> str:
@@ -118,7 +123,8 @@ def texto_riego(ctx: Contexto) -> str:
     elif necesita_riego(ctx):
         lineas.append(texto_aviso_riego(ctx))
     else:
-        clase = _clase(ctx) or "sin predicción"
-        suelo = f"{u.suelo_mv:.0f} mV" if u.suelo_mv is not None else "sin dato"
-        lineas.append(f"Por ahora no necesito agua: sonda {suelo}, estado {clase}.")
+        tierra = tierra_simple(u.suelo_mv) or "sin dato"
+        clase = _clase(ctx)
+        lineas.append(f"Por ahora no necesito agua: la tierra está {tierra}"
+                      + (f" y {ESTADO[clase]}." if clase else "."))
     return "\n".join(lineas)

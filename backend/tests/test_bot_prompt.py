@@ -30,7 +30,8 @@ def test_fragmento_largo_se_recorta():
 def test_system_es_ruperto_con_reglas():
     s = prompt.system()
     assert "Ruperto" in s and "lirio de paz" in s and "voseo" in s
-    for regla in ("[2]", "SENSORES CAÍDOS", "más mV", "120 palabras", "no coinciden"):
+    for regla in ("[2]", "sensores están caídos", "EN PALABRAS SIMPLES", "80 palabras", "no coinciden",
+                  "marchito"):
         assert regla in s
     assert s is persona.SYSTEM
 
@@ -44,3 +45,28 @@ def test_memoria_guarda_seis_turnos():
     assert m.historial(2) == []
     c = prompt.contenidos(m, 1, "TURNO")
     assert c[-1] == {"role": "user", "text": "TURNO"} and len(c) == 13
+
+
+def _frag(id_, fuente="ciencia"):
+    return Fragmento(id_, fuente, "t", None, None, "x", 0.5)
+
+
+def test_citas_salen_del_texto_y_la_ciencia_va_al_pie():
+    frags = [_frag("ciencia/ufifas-house-plant-care#0"), _frag("historial/dia-2026-10-12#0", "historial"),
+             _frag("ciencia/aspca-toxicidad#0"), _frag("ciencia/ufifas-dano-por-frio#1")]
+    texto, citados = prompt.citas("Regame [1, 2]. Soy tóxico para gatos [3][4]. Y [9] no existe.", frags)
+    assert texto == ("Regame. Soy tóxico para gatos. Y no existe.\n\n"
+                     "📚 Fuente: Universidad de Florida (UF/IFAS), ASPCA")
+    assert citados == {0, 1, 2, 3}
+
+
+def test_sin_citas_no_hay_pie():
+    assert prompt.citas("Hola.", [_frag("ciencia/rhs-guia-genero#0")]) == ("Hola.", set())
+    # Historial o proyecto citados no van al pie: son datos propios, no una fuente externa.
+    assert prompt.citas("Me regaron [1].", [_frag("historial/dia-2026-10-12#0", "historial")])[0] \
+        == "Me regaron."
+
+
+def test_turno_lleva_primero_las_palabras_simples():
+    t = prompt.turno_usuario("e", "d", [], "¿?", simple="- Tierra: seca.")
+    assert t.startswith("EN PALABRAS SIMPLES\n- Tierra: seca.\n\nESTADO ACTUAL")

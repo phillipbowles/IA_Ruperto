@@ -39,6 +39,7 @@ class Respuesta:
     en_dominio: bool | None
     intencion: str | None
     fragmentos: list[tuple[str, float]] = field(default_factory=list)   # (id, score)
+    citados: list[str] = field(default_factory=list)                    # ids marcados con [n]
     modelo: str | None = None
     latencia_ms: int = 0
     error: str | None = None
@@ -61,7 +62,8 @@ def _loguear(db: Session, chat_id: int, pregunta: str, r: Respuesta) -> None:
     try:
         db.add(Conversacion(chat_id=chat_id, pregunta=pregunta, en_dominio=r.en_dominio,
                             intencion=r.intencion,
-                            fragmentos=[{"id": i, "score": s} for i, s in r.fragmentos],
+                            fragmentos=[{"id": i, "score": s, "citado": i in r.citados}
+                                        for i, s in r.fragmentos],
                             respuesta=r.texto, modelo=r.modelo, latencia_ms=r.latencia_ms,
                             error=r.error))
         db.commit()
@@ -95,9 +97,12 @@ async def responder(texto: str, chat_id: int, db: Session, *, gemini=None,
                     log.exception("falló la búsqueda en el índice; sigo sin fragmentos")
             r.fragmentos = [(f.id, f.score) for f in frags]
             turno = prompt.turno_usuario(contexto.texto_estado(ctx), contexto.texto_dias(ctx),
-                                         frags, texto)
-            r.texto = await gemini.generar(prompt.system(), prompt.contenidos(memoria, chat_id, turno))
-            memoria.agregar(chat_id, texto, r.texto)
+                                         frags, texto, simple=contexto.texto_simple(ctx))
+            crudo = await gemini.generar(prompt.system(), prompt.contenidos(memoria, chat_id, turno))
+            r.texto, citados = prompt.citas(crudo, frags)
+            r.citados = [frags[i].id for i in sorted(citados)]
+            # Sin marcas ni pie: los [n] de un turno viejo no apuntan a los fragmentos de ahora.
+            memoria.agregar(chat_id, texto, prompt.citas(crudo, [])[0])
     except SinCupo as e:
         r.texto, r.error = persona.SIN_ALIENTO, f"429: {e}"[:500]
     except ErrorGemini as e:

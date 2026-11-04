@@ -318,6 +318,63 @@ salió bien). `responder` acepta además, por palabra clave, `gemini`, `buscar`,
 no hay FK a `chats_telegram` (se puede hablar sin `/start`). La memoria corta
 es por proceso: un redeploy la vacía (el log persistente sigue en la base).
 
+### Decisiones de la iteración con usuarios
+
+**D211 — Ruperto responde para el dueño, no para el equipo** (2026-11-04).
+La primera prueba real en Telegram ("¿cómo estás?") devolvió una respuesta
+correcta pero difícil de entender: la conclusión enterrada, jerga del
+proyecto (mV, "regla vigente", umbrales), marcas `[2]` que el usuario no puede
+abrir, una exageración por oración y la clase del modelo en femenino
+("marchita"). La consigna pide un flujo "amigable y natural" y una
+personalidad coherente, así que:
+
+- **Estructura fija**: primera oración = respuesta directa; después el porqué
+  en palabras de todos los días; al final qué hacer. ~80 palabras.
+- **Bloque `EN PALABRAS SIMPLES`** al principio del turno
+  (`contexto.texto_simple`): tierra húmeda / secándose / muy seca con los
+  **mismos cortes de la regla** (`modelo.umbrales_suelo`, 1716 y 1940 mV),
+  ambiente fresco / templado / caluroso (cortes del front), el estado en
+  masculino y "recuperándome de un riego" cuando la regla decidió por la rama
+  de `h_desde_riego`. Los mV y los nombres internos siguen en `ESTADO ACTUAL`
+  y sólo se usan si preguntan por el sensor o el modelo.
+- **Citas**: el modelo sigue marcando `[n]` (trazabilidad), pero
+  `prompt.citas` las saca del texto y agrega al pie "📚 Fuente: <institución>"
+  sólo para fragmentos científicos citados. En `conversaciones.fragmentos`
+  cada fragmento lleva `citado: true|false`: es la métrica de uso del RAG.
+- **Drama dosificado**: un toque por respuesta; el chiste nunca tapa el dato.
+- `/estado`, `/riego` y el aviso de riego usan las mismas palabras.
+- El contexto respeta el reloj inyectado (no ve mediciones posteriores a
+  `ahora`), para probar a Ruperto en momentos pasados con datos frescos
+  (`docs/entrega3/eval/probar.py`).
+
+El antes y el después, con las respuestas, en
+[entrega3/iteraciones_persona.md](entrega3/iteraciones_persona.md).
+
+**D212 — El contexto en vivo también lee `maceta-02`** (2026-11-04). La ronda
+1 encontró que el 19/10 Ruperto decía "hace más de 4 días que no me riegan"
+cuando lo habían regado el 17/10: ese riego está en la base como `maceta-02`
+(el error del 03/10–18/10, data/README.md) y el contexto sólo leía
+`maceta-01`. Ahora `contexto.ALIAS` suma `maceta-02` a `maceta-01`, con el
+`boot_id` corrido en 1000 como `datos_reales.unificar_maceta`. No cambia nada
+para los datos nuevos (llegan como `maceta-01`), pero sí para hablar del
+pasado y para la evaluación con el reloj inyectado.
+
+**D213 — Razonamiento bajo también en la generación** (2026-11-04). Con el
+default de `gemini-3-flash-preview` cada respuesta tardaba 9–30 s (ronda 1):
+demasiado para un chat. La respuesta sale de un contexto ya armado, así que
+se pide `thinking_level=LOW` como en el guardrail. Además, reglas nuevas del
+prompt por lo visto en la ronda 1: no escribir los nombres de los bloques; la
+tierra se nombra con la misma palabra del bloque simple; los umbrales y horas
+del semáforo son del modelo, no datos botánicos; con los sensores caídos sólo
+se avisa si la pregunta es sobre el estado, el riego o qué hacer.
+
+**D214 — Cupo de Gemini: PENDIENTE** (2026-11-04). El plan gratuito de
+`gemini-3-flash` da **20 pedidos por día** (lo dijo el 429 de la ronda 1) y
+cada pregunta gasta 2 (guardrail + respuesta): ~10 preguntas por día entre
+bot, pruebas y conversaciones reales. No alcanza para la entrega. Opciones:
+otro modelo con más cupo diario (los `flash-lite`), el guardrail en un modelo
+distinto (cada modelo tiene su propio cupo) o habilitar facturación.
+
 ---
 
 ## 3. Arquitectura

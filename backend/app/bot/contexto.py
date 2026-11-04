@@ -31,8 +31,21 @@ DIAS = 7
 HORAS_SERIE_RIEGO = modelo.RIEGO_TOPE_H + 1
 
 
+# Del 03/10 al 18/10 las filas de maceta-01 llegaron como maceta-02 (D212, data/README.md):
+# es la misma planta, como en `datos_reales.unificar_maceta`. El boot_id se corre
+# igual que allá, para que un cambio de identificador corte el tramo del riego.
+ALIAS = {"maceta-01": ("maceta-02",)}
+DESPLAZAMIENTO_BOOT_ALIAS = 1000
+
+
 def dispositivo() -> str:
     return os.getenv("BOT_DISPOSITIVO") or DISPOSITIVO_DEFAULT
+
+
+def _boot(f: Medicion, disp: str) -> int | None:
+    if f.dispositivo != disp and f.boot_id is not None:
+        return f.boot_id + DESPLAZAMIENTO_BOOT_ALIAS
+    return f.boot_id
 
 
 def _utc(ts: datetime | None) -> datetime | None:
@@ -116,18 +129,21 @@ def armar_contexto(db: Session, ahora: datetime | None = None,
     ctx = Contexto(dispositivo=disp, ahora=ahora)
     ts_col = func.coalesce(Medicion.ts_dispositivo, Medicion.ts_servidor)
 
-    ultima = (db.query(Medicion).filter(Medicion.dispositivo == disp)
+    # Nada posterior a `ahora`: con el reloj inyectado (tests, evaluación) el
+    # contexto es el que Ruperto habría visto en ese momento.
+    ids = (disp, *ALIAS.get(disp, ()))
+    ultima = (db.query(Medicion).filter(Medicion.dispositivo.in_(ids), ts_col <= ahora)
               .order_by(ts_col.desc(), Medicion.id.desc()).first())
     if ultima is None:
         return ctx
     ts_ult = _utc(ultima.ts_dispositivo or ultima.ts_servidor)
     desde = ts_ult - timedelta(hours=max(HORAS_SERIE_RIEGO, DIAS * 24))
-    filas = (db.query(Medicion).filter(Medicion.dispositivo == disp, ts_col >= desde,
+    filas = (db.query(Medicion).filter(Medicion.dispositivo.in_(ids), ts_col >= desde,
                                        ts_col <= ts_ult)
              .order_by(ts_col, Medicion.id).all())
 
     serie = [modelo.Muestra(ts=_utc(f.ts_dispositivo or f.ts_servidor), suelo_mv=f.suelo_mv,
-                            suelo_raw=f.suelo_raw, luz_mv=f.luz_mv, boot_id=f.boot_id)
+                            suelo_raw=f.suelo_raw, luz_mv=f.luz_mv, boot_id=_boot(f, disp))
              for f in filas]
     suelo_ult = modelo.suelo_valido(serie[-1])
     edad = max(0, int((ahora - ts_ult).total_seconds() // 60))
@@ -186,6 +202,66 @@ def _edad(minutos: int) -> str:
     if h < 48:
         return f"{h} h {minutos % 60} min"
     return f"{h // 24} días {h % 24} h"
+
+
+# ─── en palabras simples (D211) ───────────────────────────────────────────
+# Ruperto habla en masculino; las clases del modelo quedan como nombre interno.
+CLASE_SIMPLE = {
+    "saludable": "bien, firme y erguido (semáforo verde)",
+    "estresada": "algo caído, estresado (semáforo amarillo)",
+    "marchita": "marchito, con las hojas caídas (semáforo rojo)",
+}
+# Mismos cortes que las recomendaciones del front (frontend/src/lib/recomendaciones.ts).
+TEMP_FRIO_C, TEMP_CALOR_C, HR_SECA_PCT = 12, 28, 35
+
+
+def tierra_simple(mv: float | None) -> str | None:
+    if mv is None:
+        return None
+    humeda, seca = modelo.umbrales_suelo()[:2]
+    return "húmeda" if mv <= humeda else "secándose" if mv <= seca else "muy seca"
+
+
+def aire_simple(t: float | None, hr: float | None) -> str | None:
+    if t is None:
+        return None
+    temp = "fresco" if t <= TEMP_FRIO_C else "caluroso" if t >= TEMP_CALOR_C else "templado"
+    if hr is not None and hr <= HR_SECA_PCT:
+        return f"{temp} y seco"
+    return temp
+
+
+def texto_simple(ctx: Contexto) -> str:
+    """Bloque EN PALABRAS SIMPLES: lo que Ruperto le dice a alguien que sólo
+    quiere saber si regar. Los mV y los nombres internos quedan en ESTADO."""
+    u = ctx.ultima
+    if u is None:
+        return "- No tengo ninguna medición: no sé cómo estoy."
+    lineas = []
+    cuando = f"en mi última medición ({local(u.ts)})"
+    if ctx.sensores_caidos:
+        lineas.append(f"No sé cómo estoy AHORA: mis sensores no mandan datos desde el {local(u.ts)}. "
+                      "Lo que sigue es de esa última medición.")
+    r = ctx.regla
+    if r and r.clase:
+        rec = r.rama and r.rama[0].startswith("h_desde_riego") and "≤" in r.rama[0]
+        estado = ("recuperándome de un riego reciente (semáforo amarillo)" if rec
+                  else CLASE_SIMPLE[r.clase])
+        lineas.append(f"Cómo estaba {cuando}: {estado}.")
+    elif ctx.placa:
+        lineas.append(f"Cómo estaba {cuando}, según la placa: {CLASE_SIMPLE[ctx.placa.clase]}.")
+    else:
+        lineas.append(f"Cómo estaba {cuando}: mi modelo no pudo decidir ({r.motivo if r else 'sin datos'}).")
+    tierra = tierra_simple(u.suelo_mv)
+    lineas.append(f"Tierra: {tierra}." if tierra else f"Tierra: no sé ({u.suelo_nota}).")
+    aire = aire_simple(u.temp_c, u.hum_pct)
+    if aire:
+        lineas.append(f"Ambiente: {aire}.")
+    if ctx.ultimo_riego is not None and ctx.h_desde_riego < modelo.RIEGO_TOPE_H:
+        lineas.append(f"Último riego: {local(ctx.ultimo_riego)}.")
+    else:
+        lineas.append("Último riego: hace más de 4 días o no lo detecté.")
+    return "\n".join(f"- {l}" for l in lineas)
 
 
 def texto_estado(ctx: Contexto) -> str:

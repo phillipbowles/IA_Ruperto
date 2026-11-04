@@ -34,11 +34,13 @@ class SinCupo(ErrorGemini):
 
 
 def _pensar_poco(modelo: str):
-    """Razonamiento mínimo para el guardrail. `thinking_level` es de la familia
-    gemini-3; en las anteriores se deja el default del modelo."""
+    """Razonamiento bajo: el guardrail es una clasificación y la respuesta sale
+    de un contexto ya armado; con el default, gemini-3 tardaba 9–30 s por
+    respuesta (D213). `thinking_level` es de la familia gemini-3 y posteriores;
+    en las anteriores se deja el default del modelo."""
     from google.genai import types
 
-    if "gemini-3" in modelo:
+    if modelo.startswith(("gemini-3", "models/gemini-3")):
         return types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
     return None
 
@@ -103,7 +105,8 @@ class ClienteGemini:
             r = await self._client.aio.models.generate_content(
                 model=self.modelo,
                 contents=contents,
-                config=types.GenerateContentConfig(system_instruction=system, temperature=0.7),
+                config=types.GenerateContentConfig(system_instruction=system, temperature=0.7,
+                                                   thinking_config=_pensar_poco(self.modelo)),
             )
         except Exception as e:
             raise self._traducir(e) from e

@@ -19,8 +19,9 @@ def ctx(suelo=1800.0, edad=5, h=30.0, riego=None, placa=None, tendencia=-10.0):
 
 def test_texto_medicion():
     t = avisos.texto_medicion(ctx())
-    assert t.startswith("🟡 estresada")
-    assert "1800 mV" in t and "estable" in t and "22.4 °C" in t and "HR 58 %" in t
+    assert t.startswith("🟡 estoy algo caído")
+    assert "Tierra: secándose (1800 mV" in t and "estable" in t and "22.4 °C" in t
+    assert "humedad 58 %" in t and "templado" in t
     assert "secándose" in avisos.texto_medicion(ctx(tendencia=120))
 
 
@@ -53,7 +54,7 @@ def test_antirrebote():
 
 
 def test_texto_aviso_riego():
-    assert "2000 mV" in avisos.texto_aviso_riego(ctx(suelo=2000))
+    assert "tierra está muy seca (2000 mV)" in avisos.texto_aviso_riego(ctx(suelo=2000))
     assert "más de 4 días" in avisos.texto_aviso_riego(ctx(suelo=2000, h=96))
 
 
