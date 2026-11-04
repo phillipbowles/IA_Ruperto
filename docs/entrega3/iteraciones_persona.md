@@ -55,3 +55,45 @@ Lo que anduvo bien: el guardrail rechazó la receta de ñoquis sin generar; con
 la tierra mojada recién regada dijo "no me riegues" y explicó por qué el
 semáforo seguía en amarillo; las preguntas de cuidados citaron UF/IFAS, NC
 State y RHS al pie.
+
+## v3 — reglas nuevas, cadena de modelos y chequeos automáticos (rondas 2–5)
+
+Desde la ronda 2, `docs/entrega3/eval/probar.py` corre 20 preguntas en cuatro
+momentos de la serie (hoy con sensores caídos, con sed el 19/10, recién
+regado, sano el 21/10) y pasa cada respuesta por chequeos sin LLM: dominio
+correcto, ≤ 100 palabras, sin rótulos de bloques, sin femenino, sin jerga
+técnica no pedida, fuente al pie en preguntas de ciencia, aviso de sensores
+caídos sólo cuando corresponde.
+
+| ronda | modelo que responde | pasan | latencia mediana | qué se aprendió |
+|---|---|---|---|---|
+| 2 | gemini-3.5-flash | 15/20 | 7,4 s | sin fragmentos (bug del script): en cuidados y toxicidad "no tengo la información" |
+| 3 | gemini-3.5-flash | 10/20 | 4,0 s | con fragmentos, cita UF/IFAS, ASPCA, NC State; a la 11.ª pregunta, 429: 20 por día |
+| 4 | flash-lite-latest (3-flash sin cupo) | 6/14 | 3,8 s | copia rótulos; un dato del futuro por el historial del mismo día |
+| 5 | gemini-3.5-flash-lite | 16/20 | 5,3 s | buena calidad para respaldo; rótulos en medio de la línea |
+
+Ejemplo de la ronda 3 (`gemini-3.5-flash`), *¿Sos tóxico para mi gato?*:
+
+> Sí, soy tóxico para los gatos. Tengo oxalatos de calcio insolubles que le
+> pueden causar una irritación oral muy fuerte, ardor intenso en la boca y la
+> lengua, babeo excesivo, vómitos y dificultad para tragar si llega a masticar
+> mis hojas. ¡Por favor, manteneme bien lejos de sus garras curiosas! Si
+> sospechás que ingirió un pedazo de mi follaje, llevalo de inmediato con su
+> veterinario.
+>
+> 📚 Fuente: ASPCA, NC State Extension
+
+Ejemplo de la ronda 5 (`gemini-3.5-flash-lite`), recién regado, *¿Por qué tu
+semáforo está en amarillo si la tierra está mojada?*:
+
+> Mi semáforo está en amarillo porque pasaron pocas horas desde el último
+> riego. El sustrato se moja al toque, pero a mí me toma horas volver a
+> levantar las hojas. No me agregues más agua, dejame descansar tranquilo.
+> ¡Qué difícil es recuperarse a las apuradas!
+
+Lo que se corrigió después (D216, D217): cadena de modelos, guardrail en un
+`lite`, rótulos sacados con código, historial sólo de días pasados, sin
+emojis ni apodos, el ambiente sólo cuando dice algo.
+
+Pendiente de medir: una ronda completa con `gemini-3.5-flash` cuando vuelva
+su cupo diario, con todas las correcciones juntas.

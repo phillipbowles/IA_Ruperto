@@ -70,3 +70,24 @@ def test_sin_citas_no_hay_pie():
 def test_turno_lleva_primero_las_palabras_simples():
     t = prompt.turno_usuario("e", "d", [], "¿?", simple="- Tierra: seca.")
     assert t.startswith("EN PALABRAS SIMPLES\n- Tierra: seca.\n\nESTADO ACTUAL")
+
+
+def test_sin_rotulos():
+    t = "Estoy bien.\n\nEN PALABRAS SIMPLES: tierra húmeda.\n\nESTADO ACTUAL — nada."
+    assert prompt.sin_rotulos(t) == "Estoy bien.\n\nTierra húmeda.\n\nNada."
+    # En medio de la línea, como lo hace gemini-3.5-flash-lite
+    assert prompt.sin_rotulos("Estoy bien. EN PALABRAS SIMPLES: tengo la tierra húmeda.") == \
+        "Estoy bien. Tengo la tierra húmeda."
+    # "en palabras simples" dentro de una frase no es un rótulo
+    assert prompt.sin_rotulos("Te lo digo en palabras simples: regame.") == \
+        "Te lo digo en palabras simples: regame."
+
+
+def test_historial_solo_de_dias_anteriores():
+    from datetime import UTC, datetime
+    frags = [Fragmento("historial/dia-2026-10-19#0", "historial", "t", None, "2026-10-19", "x", 0.9),
+             Fragmento("historial/dia-2026-10-18#0", "historial", "t", None, "2026-10-18", "x", 0.8),
+             Fragmento("ciencia/rhs#0", "ciencia", "t", None, None, "x", 0.7)]
+    # 19/10 22:35 UTC = 19/10 19:35 en Montevideo: el resumen del 19 todavía no "pasó".
+    ids = [f.id for f in prompt.solo_pasado(frags, datetime(2026, 10, 19, 22, 35, tzinfo=UTC))]
+    assert ids == ["historial/dia-2026-10-18#0", "ciencia/rhs#0"]
