@@ -11,8 +11,10 @@ interfaz (`clasificar`, `generar`, `embeber_consulta`, `modelo`).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import time
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -45,12 +47,40 @@ def _pensar_poco(modelo: str):
     return None
 
 
+REINTENTO_S = 2.0
+SALTEO_SIN_CUPO_S = 3600
+
+
+async def _llamar(fn):
+    """Un reintento si Gemini está saturado (5xx): pasa seguido en el plan
+    gratuito y a los pocos segundos suele andar (D216). Un 429 no se reintenta:
+    es cupo, no carga."""
+    from google.genai import errors as genai_errors
+
+    try:
+        return await fn()
+    except genai_errors.ServerError as e:
+        log.warning("Gemini %s, reintento en %.0f s", e.code, REINTENTO_S)
+        await asyncio.sleep(REINTENTO_S)
+        return await fn()
+
+
 class ClienteGemini:
     def __init__(self, api_key: str | None = None, modelo: str | None = None,
                  modelo_embed: str | None = None):
         from google import genai
 
-        self.modelo = modelo or os.getenv("GEMINI_MODELO") or MODELO_DEFAULT
+        # GEMINI_MODELO admite una lista separada por comas: si uno se queda sin
+        # cupo (429) se responde con el siguiente. En el plan gratuito cada modelo
+        # flash da 20 pedidos por día, así que la cadena suma cupo (D216).
+        lista = modelo or os.getenv("GEMINI_MODELO") or MODELO_DEFAULT
+        self.modelos = [m.strip() for m in lista.split(",") if m.strip()]
+        self.modelo = self.modelos[0]
+        self.ultimo_modelo: str | None = None      # el que respondió la última vez
+        self._sin_cupo: dict[str, float] = {}      # modelo → hasta cuándo (monotonic) se saltea
+        # El guardrail puede ir en otro modelo: clasificar no necesita el mismo
+        # modelo que responder, y así no le gasta cupo (D216).
+        self.modelo_guardrail = os.getenv("GEMINI_MODELO_GUARDRAIL") or self.modelo
         self.modelo_embed = modelo_embed or os.getenv("GEMINI_MODELO_EMBED") or MODELO_EMBED_DEFAULT
         self._client = genai.Client(api_key=api_key or os.environ["GEMINI_API_KEY"])
 
@@ -72,8 +102,8 @@ class ClienteGemini:
         from google.genai import types
 
         try:
-            r = await self._client.aio.models.generate_content(
-                model=self.modelo,
+            r = await _llamar(lambda: self._client.aio.models.generate_content(
+                model=self.modelo_guardrail,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -83,9 +113,9 @@ class ClienteGemini:
                     # tope cuenta también los tokens de "thinking" y con 200 la
                     # salida llegaba cortada (MAX_TOKENS, JSON vacío). Para una
                     # clasificación alcanza con razonar poco.
-                    thinking_config=_pensar_poco(self.modelo),
+                    thinking_config=_pensar_poco(self.modelo_guardrail),
                 ),
-            )
+            ))
         except Exception as e:
             raise self._traducir(e) from e
         if isinstance(r.parsed, esquema):
@@ -101,15 +131,30 @@ class ClienteGemini:
 
         contents = [types.Content(role=c["role"], parts=[types.Part(text=c["text"])])
                     for c in contenidos]
-        try:
-            r = await self._client.aio.models.generate_content(
-                model=self.modelo,
-                contents=contents,
-                config=types.GenerateContentConfig(system_instruction=system, temperature=0.7,
-                                                   thinking_config=_pensar_poco(self.modelo)),
-            )
-        except Exception as e:
-            raise self._traducir(e) from e
+        ahora = time.monotonic()
+        candidatos = [m for m in self.modelos if self._sin_cupo.get(m, 0) <= ahora] or self.modelos
+        sin_cupo: SinCupo | None = None
+        for m in candidatos:
+            try:
+                r = await _llamar(lambda m=m: self._client.aio.models.generate_content(
+                    model=m,
+                    contents=contents,
+                    config=types.GenerateContentConfig(system_instruction=system, temperature=0.7,
+                                                       thinking_config=_pensar_poco(m)),
+                ))
+            except Exception as e:
+                err = self._traducir(e)
+                if not isinstance(err, SinCupo):
+                    raise err from e
+                # Se saltea una hora: el cupo diario no vuelve antes, y probarlo
+                # en cada pregunta sólo suma latencia.
+                self._sin_cupo[m] = ahora + SALTEO_SIN_CUPO_S
+                sin_cupo = err
+                continue
+            self.ultimo_modelo = m
+            break
+        else:
+            raise sin_cupo or SinCupo("sin modelos con cupo")
         texto = (r.text or "").strip()
         if not texto:
             raise ErrorGemini("respuesta vacía")

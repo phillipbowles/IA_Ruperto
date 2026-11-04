@@ -121,3 +121,32 @@ def test_comandos_estado_riego_ayuda(db):
     assert "no necesito agua" in correr(comando("riego", 1, db, ahora=ahora)).texto
     assert correr(comando("ayuda", 1, db)).texto == persona.AYUDA
     assert db.query(Conversacion).count() == 3
+
+
+def test_cadena_de_modelos_pasa_al_siguiente_sin_cupo(monkeypatch):
+    """GEMINI_MODELO con varios modelos: un 429 pasa al siguiente y queda salteado (D216)."""
+    from google.genai import errors as genai_errors
+
+    from app.bot import gemini as gm
+
+    llamados = []
+
+    class Modelos:
+        async def generate_content(self, model, contents, config):
+            llamados.append(model)
+            if model == "flash-a":
+                raise genai_errors.ClientError(429, {"error": {"message": "cupo diario"}})
+
+            class R:
+                text = f"respondió {model}"
+            return R()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    monkeypatch.setenv("GEMINI_MODELO", "flash-a, flash-b,lite")
+    c = gm.ClienteGemini()
+    c._client = type("C", (), {"aio": type("A", (), {"models": Modelos()})()})()
+    assert c.modelos == ["flash-a", "flash-b", "lite"] and c.modelo == "flash-a"
+    assert correr(c.generar("s", [{"role": "user", "text": "hola"}])) == "respondió flash-b"
+    assert c.ultimo_modelo == "flash-b"
+    correr(c.generar("s", [{"role": "user", "text": "otra"}]))
+    assert llamados == ["flash-a", "flash-b", "flash-b"]     # flash-a quedó salteado

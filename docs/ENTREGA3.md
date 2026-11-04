@@ -368,7 +368,7 @@ tierra se nombra con la misma palabra del bloque simple; los umbrales y horas
 del semáforo son del modelo, no datos botánicos; con los sensores caídos sólo
 se avisa si la pregunta es sobre el estado, el riego o qué hacer.
 
-**D214 — Cupo de Gemini: PENDIENTE** (2026-11-04). El plan gratuito de
+**D214 — Cupo de Gemini** (2026-11-04; resuelto en D216). El plan gratuito de
 `gemini-3-flash` da **20 pedidos por día** (lo dijo el 429 de la ronda 1) y
 cada pregunta gasta 2 (guardrail + respuesta): ~10 preguntas por día entre
 bot, pruebas y conversaciones reales. No alcanza para la entrega. Opciones:
@@ -397,6 +397,43 @@ Saludable / Estresado / Marchito.
   notebooks/ y ml/. **El LCD de la placa** muestra el identificador
   (`Pred:marchita`); pasarlo a masculino es un cambio de firmware que queda
   para cuando se vuelva a flashear (pendiente, §8).
+
+**D216 — Cadena de modelos y guardrail en un modelo lite** (2026-11-04),
+resuelve D214. Medido en las rondas 2–5: en el plan gratuito **cada modelo
+`flash` da 20 pedidos por día** (`gemini-3-flash`, `gemini-3.5-flash`, que
+Google cuenta como `gemini-3.6-flash`), el cupo es por proyecto y por modelo,
+y los `flash` más nuevos (`3.7`, `3.8`, `flash-latest`) devolvían 503 por
+saturación. Los `lite` no se agotaron nunca. Entonces:
+
+- `GEMINI_MODELO` acepta una **lista**: se responde con el primero que tenga
+  cupo; un 429 pasa al siguiente y ese modelo se saltea una hora. Cada
+  `flash` suma 20 respuestas buenas por día y un `lite` al final evita que
+  Ruperto se quede "sin aliento". `conversaciones.modelo` guarda cuál
+  respondió (en un rechazo, el del guardrail).
+- `GEMINI_MODELO_GUARDRAIL`: el filtro de tema va en un modelo `lite`
+  (`gemini-flash-lite-latest`), que clasificó bien las 40+ preguntas de las
+  rondas, tarda ~1 s y no le gasta cupo al modelo que responde.
+- Un reintento a los 2 s ante un 5xx (saturación); un 429 no se reintenta.
+- Configuración propuesta para producción:
+  `GEMINI_MODELO=gemini-3.5-flash,gemini-3-flash-preview,gemini-3.5-flash-lite`
+  y `GEMINI_MODELO_GUARDRAIL=gemini-flash-lite-latest`.
+
+**D217 — Higiene de la respuesta y del contexto** (2026-11-04), por las
+rondas 2–5.
+
+- `prompt.sin_rotulos`: si el modelo copia el nombre de un bloque ("EN
+  PALABRAS SIMPLES:"), se saca con código; los `lite` lo hacen aunque el
+  prompt lo prohíba.
+- `prompt.solo_pasado`: del historial indexado sólo entran días **anteriores**
+  al de hoy; el día en curso lo da SQL. En la ronda 4, con el reloj en el
+  19/10 19:35, el resumen de ese día le hizo decir a Ruperto que lo habían
+  regado a las 19:40: cinco minutos en el futuro.
+- Reglas de estilo nuevas: el ambiente sólo si dice algo (no "templado" en
+  cada respuesta), sin emojis propios, sin apodos ("patrón").
+- Encontrado de paso: con un cliente de Gemini inyectado, `responder` no
+  configura el embedder de la búsqueda (en producción sí). El script de
+  evaluación lo configura; en la ronda 2 por eso ninguna respuesta citó
+  fuentes y en "cuidados" Ruperto dijo no tener la información.
 
 ---
 

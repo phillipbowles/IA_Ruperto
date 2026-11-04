@@ -86,6 +86,7 @@ async def responder(texto: str, chat_id: int, db: Session, *, gemini=None,
         r.en_dominio, r.intencion = c.en_dominio, c.intencion
         if not c.en_dominio:
             r.texto = persona.rechazo()   # el generador no se llama
+            r.modelo = getattr(gemini, "modelo_guardrail", r.modelo)
         else:
             ctx = contexto.armar_contexto(db, ahora=ahora)
             fuentes = dominio.fuentes_para(c.intencion)
@@ -95,11 +96,13 @@ async def responder(texto: str, chat_id: int, db: Session, *, gemini=None,
                     frags = await asyncio.to_thread(buscar, texto, K_FRAGMENTOS, fuentes)
                 except Exception:
                     log.exception("falló la búsqueda en el índice; sigo sin fragmentos")
+            frags = prompt.solo_pasado(frags, ctx.ahora)
             r.fragmentos = [(f.id, f.score) for f in frags]
             turno = prompt.turno_usuario(contexto.texto_estado(ctx), contexto.texto_dias(ctx),
                                          frags, texto, simple=contexto.texto_simple(ctx))
             crudo = await gemini.generar(prompt.system(), prompt.contenidos(memoria, chat_id, turno))
-            r.texto, citados = prompt.citas(crudo, frags)
+            r.modelo = getattr(gemini, "ultimo_modelo", None) or r.modelo
+            r.texto, citados = prompt.citas(prompt.sin_rotulos(crudo), frags)
             r.citados = [frags[i].id for i in sorted(citados)]
             # Sin marcas ni pie: los [n] de un turno viejo no apuntan a los fragmentos de ahora.
             memoria.agregar(chat_id, texto, prompt.citas(crudo, [])[0])

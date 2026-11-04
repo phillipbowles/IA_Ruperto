@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict, deque
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from . import persona
 from .recuperar import Fragmento
 
+ZONA = ZoneInfo("America/Montevideo")
 TURNOS_MEMORIA = 6
 MAX_CHARS_FRAGMENTO = 1500
 
@@ -79,6 +82,33 @@ def citas(texto: str, fragmentos: list[Fragmento]) -> tuple[str, set[int]]:
     if fuentes:
         limpio += "\n\n📚 Fuente: " + ", ".join(fuentes)
     return limpio, citados
+
+
+# ─── higiene de la respuesta (D217) ───────────────────────────────────────
+# En mayúsculas y seguido de dos puntos o raya: así sólo se toca el rótulo
+# copiado, no la frase "en palabras simples" dicha con naturalidad.
+_ROTULO = re.compile(r"(?:^[ \t]*)?(EN PALABRAS SIMPLES|ESTADO ACTUAL|ÚLTIMOS 7 DÍAS|FRAGMENTOS|PREGUNTA)"
+                     r"(?:[ \t]*[:\-—][ \t]*|[ \t]*$)", re.M)
+
+
+def sin_rotulos(texto: str) -> str:
+    """Saca los nombres de los bloques del prompt cuando el modelo los copia
+    como rótulo ("EN PALABRAS SIMPLES: tierra húmeda."). El prompt ya lo pide;
+    los modelos lite lo hacen igual."""
+    limpio = _ROTULO.sub("", texto)
+    # Si el rótulo abría la línea, lo que sigue arranca en minúscula.
+    limpio = re.sub(r"(^|[.!?]\s+)([a-záéíóúñ])", lambda m: m.group(1) + m.group(2).upper(),
+                    limpio, flags=re.M)
+    return limpio.strip()
+
+
+def solo_pasado(fragmentos: list[Fragmento], ahora: datetime) -> list[Fragmento]:
+    """El historial indexado aporta sólo días anteriores al de hoy: el día en
+    curso lo cuenta el contexto SQL. Así un resumen diario no adelanta lo que
+    todavía no pasó (con el reloj inyectado de la evaluación, o si el índice se
+    regenera a mitad del día)."""
+    hoy = ahora.astimezone(ZONA).date().isoformat()
+    return [f for f in fragmentos if not (f.fuente == "historial" and f.fecha and f.fecha >= hoy)]
 
 
 class Memoria:
