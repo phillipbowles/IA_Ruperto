@@ -29,6 +29,11 @@ MIN_SENSORES_CAIDOS = 60
 DIAS = 7
 # h_desde_riego tiene tope de 96 h; la serie arranca 1 h antes para salir del warm-up.
 HORAS_SERIE_RIEGO = modelo.RIEGO_TOPE_H + 1
+# Más que esto entre dos muestras es un hueco: la placa estuvo apagada o sin WiFi.
+HUECO_DATOS = timedelta(hours=2)
+# Después de un hueco la sonda arranca alta y baja de a poco (transitorio): se
+# compara con el mínimo de la primera hora, no con la primera lectura.
+VENTANA_TRAS_HUECO = timedelta(hours=1)
 
 
 # Del 03/10 al 18/10 las filas de maceta-01 llegaron como maceta-02 (D212, data/README.md):
@@ -94,6 +99,7 @@ class Dia:
     temp_media: float | None
     hum_media: float | None
     luz_max: float | None
+    estados: dict[str, int] = field(default_factory=dict)   # clase de la regla → muestras
 
 
 @dataclass
@@ -109,6 +115,11 @@ class Contexto:
     riegos_7d: list[datetime] = field(default_factory=list)
     tendencia_24h: dict | None = None     # min, max, delta, n
     dias: list[Dia] = field(default_factory=list)
+    # Línea de tiempo de los últimos 7 días (D218): lo que la búsqueda semántica
+    # no resuelve ("¿cuándo fue la última vez que...?").
+    huecos: list[tuple[datetime, datetime]] = field(default_factory=list)
+    riegos_en_hueco: list[tuple[datetime, datetime]] = field(default_factory=list)
+    ultimo_mal: tuple[datetime, str] | None = None   # última muestra estresado/marchito
 
     @property
     def coinciden(self) -> bool | None:
@@ -173,6 +184,8 @@ def armar_contexto(db: Session, ahora: datetime | None = None,
         ctx.tendencia_24h = {"min": min(ult24), "max": max(ult24),
                              "delta": ult24[-1] - ult24[0], "n": len(ult24)}
 
+    _linea_de_tiempo(ctx, serie, riegos.detectados, ts_ult)
+
     por_dia: dict[str, list[tuple[Medicion, modelo.Muestra]]] = defaultdict(list)
     for f, m in zip(filas, serie):
         if m.ts >= ts_ult - timedelta(days=DIAS):
@@ -186,8 +199,54 @@ def armar_contexto(db: Session, ahora: datetime | None = None,
         ctx.dias.append(Dia(fecha=fecha, n=len(fs), suelo_media=_media(suelos),
                             suelo_min=min(suelos, default=None), suelo_max=max(suelos, default=None),
                             temp_media=_media(temps), hum_media=_media(hums),
-                            luz_max=max(luces, default=None)))
+                            luz_max=max(luces, default=None),
+                            estados=_contar_estados([m for _, m in fs], riegos.detectados)))
     return ctx
+
+
+def _clase_en(m: modelo.Muestra, riegos: list[datetime]) -> modelo.Resultado | None:
+    """La regla vigente en una muestra pasada, con las horas desde el riego de
+    ese momento."""
+    s = modelo.suelo_valido(m)
+    if s is None:
+        return None
+    previos = [r for r in riegos if r <= m.ts]
+    h = modelo.horas_desde(previos[-1] if previos else None, m.ts)
+    return modelo.evaluar({"suelo_mv": s, "h_desde_riego": h})
+
+
+def _contar_estados(muestras: list[modelo.Muestra], riegos: list[datetime]) -> dict[str, int]:
+    cuenta: dict[str, int] = defaultdict(int)
+    for m in muestras:
+        r = _clase_en(m, riegos)
+        if r and r.clase:
+            cuenta[r.clase] += 1
+    return dict(cuenta)
+
+
+def _recuperandose(r: modelo.Resultado) -> bool:
+    return bool(r.rama) and r.rama[0].startswith("h_desde_riego") and "≤" in r.rama[0]
+
+
+def _linea_de_tiempo(ctx: Contexto, serie: list[modelo.Muestra], riegos: list[datetime],
+                     ts_ult: datetime) -> None:
+    desde = ts_ult - timedelta(days=DIAS)
+    serie = [m for m in serie if m.ts >= desde]
+    for previa, m in zip(serie, serie[1:]):
+        if m.ts - previa.ts <= HUECO_DATOS:
+            continue
+        ctx.huecos.append((previa.ts, m.ts))
+        antes = [s for x in serie if x.ts <= previa.ts and (s := modelo.suelo_valido(x)) is not None]
+        despues = [s for x in serie if m.ts <= x.ts <= m.ts + VENTANA_TRAS_HUECO
+                   and (s := modelo.suelo_valido(x)) is not None]
+        if antes and despues and antes[-1] - min(despues) >= modelo.RIEGO_CAIDA_MV:
+            ctx.riegos_en_hueco.append((previa.ts, m.ts))
+    for m in reversed(serie):
+        r = _clase_en(m, riegos)
+        # La recuperación tras un riego no es "estar mal": la planta ya tiene agua.
+        if r and r.clase in ("estresada", "marchita") and not _recuperandose(r):
+            ctx.ultimo_mal = (m.ts, r.clase)
+            break
 
 
 # ─── texto para el prompt ─────────────────────────────────────────────────
@@ -211,6 +270,7 @@ CLASE_SIMPLE = {
     "estresada": "algo caído, estresado (semáforo amarillo)",
     "marchita": "marchito, con las hojas caídas (semáforo rojo)",
 }
+CLASE_CORTA = {"saludable": "bien", "estresada": "estresado", "marchita": "marchito"}
 # Mismos cortes que las recomendaciones del front (frontend/src/lib/recomendaciones.ts).
 TEMP_FRIO_C, TEMP_CALOR_C, HR_SECA_PCT = 12, 28, 35
 
@@ -257,10 +317,23 @@ def texto_simple(ctx: Contexto) -> str:
     aire = aire_simple(u.temp_c, u.hum_pct)
     if aire:
         lineas.append(f"Ambiente: {aire}.")
-    if ctx.ultimo_riego is not None and ctx.h_desde_riego < modelo.RIEGO_TOPE_H:
+    hueco = ctx.riegos_en_hueco[-1] if ctx.riegos_en_hueco else None
+    if hueco and (ctx.ultimo_riego is None or hueco[1] > ctx.ultimo_riego):
+        lineas.append(f"Último riego: me regaron mientras la placa estaba apagada, entre el "
+                      f"{local(hueco[0])} y el {local(hueco[1])} (la tierra estaba más seca antes "
+                      "y volvió húmeda); la hora exacta no la sé.")
+    elif ctx.ultimo_riego is not None and ctx.h_desde_riego < modelo.RIEGO_TOPE_H:
         lineas.append(f"Último riego: {local(ctx.ultimo_riego)}.")
     else:
         lineas.append("Último riego: hace más de 4 días o no lo detecté.")
+    if ctx.ultimo_mal:
+        ts, clase = ctx.ultimo_mal
+        lineas.append(f"La última vez que estuve {CLASE_CORTA[clase]} según mi modelo: {local(ts)}.")
+    elif ctx.dias:
+        lineas.append("En los últimos 7 días con datos no estuve estresado ni marchito según mi modelo.")
+    for a, b in ctx.huecos:
+        lineas.append(f"No tengo datos desde el {local(a)} hasta el {local(b)} (la placa estuvo "
+                      "apagada): de ese lapso no sé cómo estuve.")
     return "\n".join(f"- {l}" for l in lineas)
 
 
@@ -320,8 +393,17 @@ def texto_dias(ctx: Contexto) -> str:
         lineas.append("Riegos detectados en 7 días: " + ", ".join(local(r) for r in ctx.riegos_7d) + ".")
     else:
         lineas.append("Riegos detectados en 7 días: ninguno.")
+    for a, b in ctx.huecos:
+        lineas.append(f"Hueco sin datos: del {local(a)} al {local(b)}.")
+    for a, b in ctx.riegos_en_hueco:
+        lineas.append(f"Riego durante un hueco: la sonda estaba más seca el {local(a)} que al "
+                      f"volver el {local(b)}.")
     for d in ctx.dias:
-        lineas.append(f"{d.fecha}: sonda media {_f(d.suelo_media, unidad=' mV')} "
+        total = sum(d.estados.values())
+        estados = ", ".join(f"{CLASE_CORTA[c]} {round(100 * n / total)} %"
+                            for c, n in sorted(d.estados.items(), key=lambda x: -x[1])) if total else "sin dato"
+        lineas.append(f"{d.fecha}: estado según mi modelo: {estados}; "
+                      f"sonda media {_f(d.suelo_media, unidad=' mV')} "
                       f"(mín {_f(d.suelo_min)}, máx {_f(d.suelo_max)}), "
                       f"T media {_f(d.temp_media, '.1f', ' °C')}, HR media {_f(d.hum_media, '.0f', ' %')}, "
                       f"luz máx {_f(d.luz_max, unidad=' mV')}, {d.n} muestras.")

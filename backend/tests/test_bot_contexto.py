@@ -99,3 +99,30 @@ def test_maceta_02_es_la_misma_planta(db):
     cargar(db, [1520.0] * 3, dispositivo="maceta-01", t0=T0 + 16 * PASO)
     ctx = contexto.armar_contexto(db, ahora=T0 + 19 * PASO)
     assert ctx.ultimo_riego == T0 + 13 * PASO and ctx.ultima.suelo_mv == 1520.0
+
+
+def test_linea_de_tiempo_con_hueco_y_riego_mientras_estaba_apagada(db):
+    # Como el 29/10–04/11: seco y marchito, la placa se apaga 5 días y vuelve
+    # regada (boot nuevo, primera lectura saturada y después húmeda).
+    cargar(db, [2060.0] * 13, boot_id=59)
+    vuelta = T0 + timedelta(days=5)
+    filas = cargar(db, [None] + [1220.0] * 12, boot_id=60, t0=vuelta)
+    filas[0].suelo_raw = 4095
+    db.commit()
+    ctx = contexto.armar_contexto(db, ahora=filas[-1].ts_dispositivo + timedelta(minutes=2))
+    assert ctx.huecos == [(T0 + 12 * PASO, vuelta)]
+    assert ctx.riegos_en_hueco == [(T0 + 12 * PASO, vuelta)]
+    assert ctx.ultimo_mal == (T0 + 12 * PASO, "marchita")
+    s = contexto.texto_simple(ctx)
+    assert "me regaron mientras la placa estaba apagada" in s
+    assert "La última vez que estuve marchito según mi modelo" in s
+    assert "No tengo datos desde el" in s
+    d = contexto.texto_dias(ctx)
+    assert "Hueco sin datos" in d and "estado según mi modelo: marchito 100 %" in d
+
+
+def test_sin_huecos_ni_malos_momentos(db):
+    filas = cargar(db, [1500.0] * 30)
+    ctx = contexto.armar_contexto(db, ahora=filas[-1].ts_dispositivo)
+    assert ctx.huecos == [] and ctx.ultimo_mal is None
+    assert "no estuve estresado ni marchito" in contexto.texto_simple(ctx)

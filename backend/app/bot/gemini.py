@@ -65,6 +65,12 @@ async def _llamar(fn):
         return await fn()
 
 
+def _saturado(e: Exception) -> bool:
+    from google.genai import errors as genai_errors
+
+    return isinstance(e, genai_errors.ServerError)
+
+
 class ClienteGemini:
     def __init__(self, api_key: str | None = None, modelo: str | None = None,
                  modelo_embed: str | None = None):
@@ -144,13 +150,17 @@ class ClienteGemini:
                 ))
             except Exception as e:
                 err = self._traducir(e)
-                if not isinstance(err, SinCupo):
-                    raise err from e
-                # Se saltea una hora: el cupo diario no vuelve antes, y probarlo
-                # en cada pregunta sólo suma latencia.
-                self._sin_cupo[m] = ahora + SALTEO_SIN_CUPO_S
-                sin_cupo = err
-                continue
+                if isinstance(err, SinCupo):
+                    # Se saltea una hora: el cupo diario no vuelve antes, y probarlo
+                    # en cada pregunta sólo suma latencia.
+                    self._sin_cupo[m] = ahora + SALTEO_SIN_CUPO_S
+                    sin_cupo = err
+                    continue
+                if _saturado(e) and m != candidatos[-1]:
+                    # Saturado aun después del reintento: que conteste el siguiente.
+                    log.warning("%s saturado, paso al siguiente modelo", m)
+                    continue
+                raise err from e
             self.ultimo_modelo = m
             break
         else:

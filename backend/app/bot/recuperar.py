@@ -134,3 +134,19 @@ def buscar(consulta: str, k: int = 5, fuentes: set[str] | None = None, *,
         for i in orden
         for c in [idx.chunks[i]]
     ]
+
+
+def recientes(prefijo: str, n: int, antes_de: str, *, indice: Indice | None = None) -> list[Fragmento]:
+    """Los `n` chunks más nuevos cuyo id empieza con `prefijo` y cuya fecha es
+    anterior a `antes_de` (YYYY-MM-DD). La búsqueda semántica no entiende de
+    "lo último": para "¿cuándo fue la última vez que...?" hace falta el orden
+    por fecha (D218)."""
+    idx = indice if indice is not None else _indice_default()
+    if idx is None or n <= 0:
+        return []
+    cand = [c for c in idx.chunks
+            if c["id"].startswith(prefijo) and c.get("fecha") and c["fecha"] < antes_de]
+    cand.sort(key=lambda c: (c["fecha"], c["id"]), reverse=True)
+    return [Fragmento(id=c["id"], fuente=c.get("fuente", ""), titulo=c.get("titulo", ""),
+                      url=c.get("url"), fecha=c.get("fecha"), texto=c.get("texto", ""), score=0.0)
+            for c in cand[:n]]

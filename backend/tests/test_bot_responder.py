@@ -1,10 +1,12 @@
 """responder de punta a punta con Gemini y base falsos (§3), guardrail y comandos."""
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
+import numpy as np
+import pytest
 from conftest import GeminiFalso, SinCupo, cargar
 
-from app.bot import persona, prompt
+from app.bot import persona, prompt, recuperar
 from app.bot.gemini import ErrorGemini
 from app.bot.recuperar import Fragmento
 from app.bot.responder import comando, responder
@@ -13,6 +15,12 @@ from app.models import ChatTelegram, Conversacion
 
 def correr(coro):
     return asyncio.run(coro)
+
+
+@pytest.fixture(autouse=True)
+def sin_episodios_recientes(monkeypatch):
+    """Los tests no leen el índice real; el que necesita recientes los inyecta."""
+    monkeypatch.setattr(recuperar, "recientes", lambda *a, **k: [])
 
 
 def buscador(*frags):
@@ -150,3 +158,82 @@ def test_cadena_de_modelos_pasa_al_siguiente_sin_cupo(monkeypatch):
     assert c.ultimo_modelo == "flash-b"
     correr(c.generar("s", [{"role": "user", "text": "otra"}]))
     assert llamados == ["flash-a", "flash-b", "flash-b"]     # flash-a quedó salteado
+
+
+# ─── memoria y repreguntas (D218) ─────────────────────────────────────────
+def test_repregunta_usa_el_intercambio_anterior(db):
+    cargar(db, [1500.0] * 3)
+    g, b, mem = GeminiFalso(intencion="cuidados"), buscador(FRAG), prompt.Memoria()
+    correr(responder("¿Sos tóxico para mi gato?", 5, db, gemini=g, buscar=b, memoria=mem))
+    correr(responder("¿y para mi perro?", 5, db, gemini=g, buscar=b, memoria=mem))
+    # El guardrail ve la charla y la búsqueda junta la repregunta con la anterior.
+    assert "Intercambio anterior" not in g.prompts_clasificar[0]
+    assert "Usuario: ¿Sos tóxico para mi gato?" in g.prompts_clasificar[1]
+    assert b.llamadas[1][0] == "¿Sos tóxico para mi gato? ¿y para mi perro?"
+    # Una pregunta larga y completa se busca sola.
+    larga = "¿Cuánta luz necesita un lirio de paz que vive adentro de la casa en invierno?"
+    correr(responder(larga, 5, db, gemini=g, buscar=b, memoria=mem))
+    assert b.llamadas[2][0] == larga
+
+
+def test_memoria_vence_a_las_dos_horas():
+    mem = prompt.Memoria()
+    mem.agregar(1, "vieja", "r", ts=datetime.now(UTC) - timedelta(hours=3))
+    mem.agregar(1, "nueva", "r")
+    assert [c["text"] for c in mem.historial(1)] == ["nueva", "r"]
+    assert mem.ultimo_intercambio(1) == ("nueva", "r")
+
+
+def test_memoria_se_rearma_desde_la_base(db, monkeypatch):
+    cargar(db, [1500.0] * 3)
+    ahora = datetime.now(UTC)
+    db.add_all([
+        Conversacion(chat_id=8, ts=ahora - timedelta(minutes=10), pregunta="¿cómo estás?",
+                     en_dominio=True, intencion="estado", respuesta="Bárbaro [1].", fragmentos=[]),
+        Conversacion(chat_id=8, ts=ahora - timedelta(hours=5), pregunta="viejo",
+                     en_dominio=True, intencion="estado", respuesta="viejo", fragmentos=[]),
+        Conversacion(chat_id=8, ts=ahora - timedelta(minutes=5), pregunta="falló",
+                     en_dominio=True, respuesta="x", error="429", fragmentos=[]),
+    ])
+    db.commit()
+    mem = prompt.Memoria(desde_db=True)
+    g = GeminiFalso()
+    correr(responder("¿y desde cuándo?", 8, db, gemini=g, buscar=buscador(), memoria=mem))
+    pasado = [c["text"] for c in g.llamadas_generar[0][1][:-1]]
+    assert pasado == ["¿cómo estás?", "Bárbaro."]
+
+
+def test_episodios_recientes_por_fecha(db, monkeypatch):
+    chunks = [{"id": f"historial/episodio-{i}#0", "fuente": "historial", "titulo": f"E{i}",
+               "fecha": f, "texto": "x"}
+              for i, f in [(1, "2026-10-01"), (2, "2026-10-19"), (3, "2026-10-12"), (4, "2026-11-04")]]
+    idx = recuperar.Indice(chunks, np.zeros((4, 2), dtype=np.float32), {"dim": 2})
+    monkeypatch.undo()   # el fixture autouse lo había anulado
+    ids = [f.id for f in recuperar.recientes("historial/episodio", 2, "2026-11-04", indice=idx)]
+    assert ids == ["historial/episodio-2#0", "historial/episodio-3#0"]
+
+
+def test_cadena_pasa_al_siguiente_si_un_modelo_esta_saturado(monkeypatch):
+    from google.genai import errors as genai_errors
+
+    from app.bot import gemini as gm
+
+    monkeypatch.setattr(gm, "REINTENTO_S", 0)
+    llamados = []
+
+    class Modelos:
+        async def generate_content(self, model, contents, config):
+            llamados.append(model)
+            if model == "flash":
+                raise genai_errors.ServerError(503, {"error": {"message": "high demand"}})
+
+            class R:
+                text = f"respondió {model}"
+            return R()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    monkeypatch.setenv("GEMINI_MODELO", "flash,lite")
+    c = gm.ClienteGemini()
+    c._client = type("C", (), {"aio": type("A", (), {"models": Modelos()})()})()
+    assert correr(c.generar("s", [{"role": "user", "text": "hola"}])) == "respondió lite"
+    assert llamados == ["flash", "flash", "lite"]      # un reintento y después el siguiente
