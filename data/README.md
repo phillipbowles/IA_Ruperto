@@ -214,3 +214,20 @@ snapshots anteriores era un hueco, ya está en la base (ver el snapshot del
 Las features cortan la ventana en
 cada hueco y en cada cambio de `boot_id` (contrato de ENTREGA2.md §4), igual
 que el buffer de la placa, y el modelo se entrena y evalúa sólo con lo medido.
+
+## Snapshot del 03/11 (Tarea 3)
+
+Snapshot `mediciones_raw_2026-11-03.csv`: **21.853 filas**. Las 21.850 primeras
+son idénticas al snapshot del 23/10; `SNAPSHOT_VIGENTE` **sigue apuntando al
+del 23/10** para que los números de la Tarea 2 se puedan reproducir
+(docs/ENTREGA3.md, D11). Este lo usa sólo el historial del RAG
+(`rag/construir_indice.py`).
+
+- Sólo **3 filas nuevas**, todas del 29/10 entre 21:02 y 21:12 UTC (boot 59,
+  firmware 2.0.0, cadencia de 5 min). Entre el 22/10 21:34 y el 29/10 21:02 la
+  base no tiene **ninguna** fila: la placa estuvo apagada o sin red. Después
+  del 29/10 21:12 tampoco hay nada.
+- La primera llega con `hora_sin_sincronizar`. La segunda (muestra 17497) es una
+  pulsación `saludable` con la sonda en 1974 mV, por encima del corte de
+  marchita de la regla (1940 mV) y recién arrancada (transitorio de la sonda).
+  Con 3 filas no alcanza para abrir un episodio: queda sin etiqueta.
