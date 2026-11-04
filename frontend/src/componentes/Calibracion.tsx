@@ -11,7 +11,7 @@ import { achicar } from "../lib/imagen";
  *  reflejadas. */
 
 const CLASES: Clase[] = ["saludable", "estresada", "marchita"];
-const NOMBRE: Record<Clase, string> = { saludable: "Saludable", estresada: "Estresada", marchita: "Marchita" };
+const NOMBRE: Record<Clase, string> = { saludable: "Saludable", estresada: "Estresado", marchita: "Marchito" };
 const CLAVE_STORAGE = "plantaia.calibracion.token";
 
 // Mismos cortes que el backend (app/routers/analisis.py).

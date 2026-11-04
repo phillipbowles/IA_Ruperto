@@ -5,8 +5,8 @@ import type { Punto } from "../lib/analisis";
    etiqueta, y por eso va en gris y no toma un slot del palette. */
 const CLASES: Record<string, { color: string; texto: string }> = {
   saludable: { color: "var(--serie-3)", texto: "Saludable (turgente)" },
-  estresada: { color: "var(--serie-4)", texto: "Estresada (marchitez transitoria)" },
-  marchita:  { color: "var(--serie-2)", texto: "Marchita (marchitez franca)" },
+  estresada: { color: "var(--serie-4)", texto: "Estresado (marchitez transitoria)" },
+  marchita:  { color: "var(--serie-2)", texto: "Marchito (marchitez franca)" },
   sin_etiquetar: { color: "var(--borde)", texto: "Sin etiquetar" },
 };
 

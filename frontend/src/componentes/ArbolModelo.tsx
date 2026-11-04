@@ -8,7 +8,7 @@ import type { Clase } from "../tipos";
  *  La forma sale de `modelo_placa.json` (lib/modeloPlaca.ts): el layout se
  *  calcula, así que sirve para cualquier árbol que exporte el modelo. */
 
-const NOMBRE: Record<Clase, string> = { saludable: "Saludable", estresada: "Estresada", marchita: "Marchita" };
+const NOMBRE: Record<Clase, string> = { saludable: "Saludable", estresada: "Estresado", marchita: "Marchito" };
 const CLASES: Clase[] = ["saludable", "estresada", "marchita"];
 
 // Geometría. Las hojas van en fila, separadas DX; cada nodo interno queda

@@ -1,5 +1,16 @@
-from sqlalchemy import (JSON, BigInteger, Column, DateTime, Float, ForeignKey, Integer, String,
-                        UniqueConstraint)
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -156,3 +167,43 @@ class CalibracionFoto(Base):
     vision_metricas = Column(JSON, nullable=True)
     ia_modelo = Column(String(64), nullable=True)
     ia_puntaje = Column(Integer, nullable=True)
+
+
+class ChatTelegram(Base):
+    """Chat de Telegram que habló con Ruperto y si quiere avisos (docs/ENTREGA3.md D6).
+
+    En la base y no en memoria: un redeploy del bot no puede olvidar a quién
+    avisar. `/start` suscribe (o reactiva), `/silencio` desuscribe.
+    """
+
+    __tablename__ = "chats_telegram"
+
+    chat_id = Column(BigInteger, primary_key=True, autoincrement=False)
+    usuario = Column(String(64), nullable=True)
+    suscripto = Column(Boolean, nullable=False, default=True, server_default="true")
+    creado_en = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Antirrebote del aviso de riego (§6): no repetir antes de 6 h por chat.
+    ultimo_aviso_riego = Column(DateTime(timezone=True), nullable=True)
+
+
+class Conversacion(Base):
+    """Cada respuesta del bot, con lo que la produjo (docs/ENTREGA3.md D9).
+
+    Es la evidencia de las conversaciones de la entrega y la materia prima de
+    la evaluación: decisión del guardrail, fragmentos recuperados con su score,
+    modelo y latencia. Sin FK a `chats_telegram`: se puede hablar sin /start.
+    """
+
+    __tablename__ = "conversaciones"
+
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(BigInteger, nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    pregunta = Column(Text, nullable=False)
+    en_dominio = Column(Boolean, nullable=True)       # null = no se llegó a clasificar
+    intencion = Column(String(20), nullable=True)
+    fragmentos = Column(JSON, nullable=True)          # [{"id": ..., "score": ...}]
+    respuesta = Column(Text, nullable=False)
+    modelo = Column(String(64), nullable=True)
+    latencia_ms = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)

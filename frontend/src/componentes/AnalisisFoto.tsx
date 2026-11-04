@@ -29,8 +29,8 @@ const METRICAS: Record<string, string> = {
 
 const INFO: Record<Clase, { nombre: string; detalle: string }> = {
   saludable: { nombre: "Saludable", detalle: "Turgente: hojas firmes y erguidas, la espata bien arriba." },
-  estresada: { nombre: "Estresada", detalle: "Marchitez transitoria: las hojas empiezan a ceder y la flor se inclina." },
-  marchita: { nombre: "Marchita", detalle: "Marchitez franca: hojas caídas sobre la maceta. Necesita riego." },
+  estresada: { nombre: "Estresado", detalle: "Marchitez transitoria: las hojas empiezan a ceder y la flor se inclina." },
+  marchita: { nombre: "Marchito", detalle: "Marchitez franca: hojas caídas sobre la maceta. Necesita riego." },
 };
 
 export function AnalisisFoto() {
@@ -119,7 +119,7 @@ export function AnalisisFoto() {
         {analisis.isIdle && (
           <p className="lirio__detalle">
             {METODOS.find((m) => m.id === metodo)!.descripcion} El resultado se ubica en el medidor: rojo es
-            marchita, verde es turgente.
+            marchito, verde es turgente.
           </p>
         )}
         {r && !r.es_planta && (

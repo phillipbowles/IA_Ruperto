@@ -12,8 +12,8 @@ import { hace } from "../lib/formato";
 
 const INFO: Record<Clase | "sin", { nombre: string; detalle: string }> = {
   saludable: { nombre: "Saludable", detalle: "Turgente: hojas firmes y erguidas, la espata bien arriba." },
-  estresada: { nombre: "Estresada", detalle: "Marchitez transitoria: las hojas empiezan a ceder y la flor se inclina." },
-  marchita: { nombre: "Marchita", detalle: "Marchitez franca: hojas caídas sobre la maceta. Necesita riego." },
+  estresada: { nombre: "Estresado", detalle: "Marchitez transitoria: las hojas empiezan a ceder y la flor se inclina." },
+  marchita: { nombre: "Marchito", detalle: "Marchitez franca: hojas caídas sobre la maceta. Necesita riego." },
   sin: { nombre: "Sin etiqueta", detalle: "La última medición no trae observación. El botón de la maceta la registra." },
 };
 
@@ -135,7 +135,7 @@ export function AvatarLirio({ estado, fuente, ts }: {
       </div>
 
       <div className="lirio__texto">
-        <span className="lirio__et">Cómo está la planta ahora</span>
+        <span className="lirio__et">Cómo está Ruperto ahora</span>
         <span className="lirio__nombre">
           <span className="lirio__punto" aria-hidden="true" />
           {nombre}

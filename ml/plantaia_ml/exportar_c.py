@@ -16,6 +16,9 @@ maceta-01 y escribe estos archivos:
 - `frontend/src/modelo_placa.json` — versión y nodos del modelo (si es un
   árbol) para que el dashboard dibuje el árbol que corre en la placa y avise
   si la placa reporta otra versión.
+- `backend/app/bot/modelo_placa.json` — el mismo JSON, para que el bot recalcule
+  la regla vigente en el server (docs/ENTREGA3.md D8): el contexto de build del
+  backend no ve `frontend/`.
 
 Sin dependencias nuevas: numpy, pandas y sklearn.
 
@@ -69,6 +72,7 @@ RUTA_MODELO = RAIZ / "firmware" / "lib" / "plantaia_ml" / "modelo_plantaia.h"
 RUTA_VECTORES = RAIZ / "firmware" / "test" / "test_modelo" / "vectores.h"
 RUTA_PARIDAD = RAIZ / "firmware" / "test" / "test_features" / "paridad_features.h"
 RUTA_FRONT = RAIZ / "frontend" / "src" / "modelo_placa.json"
+RUTA_BOT = RAIZ / "backend" / "app" / "bot" / "modelo_placa.json"
 
 # Lo que se exporta como árbol (tablas de nodos): los de sklearn y la regla sonda + riego.
 ARBOLES = (DecisionTreeClassifier, ReglaSueloRiego)
@@ -627,9 +631,11 @@ def exportar(modelo: Pipeline, df: pd.DataFrame, metricas: dict | None = None,
         RUTA_VECTORES.write_text(vect)
         RUTA_PARIDAD.write_text(par)
         RUTA_FRONT.write_text(front)
+        RUTA_BOT.parent.mkdir(parents=True, exist_ok=True)
+        RUTA_BOT.write_text(front)
     return {"version": version_modelo(modelo), "n_vectores": len(Xv), "n_paridad": len(f),
             "paridad_ok": int(f.valido.sum()), "paridad_resets": int((f.tramo != f.tramo.shift()).sum()),
-            "metricas": met, "rutas": [RUTA_MODELO, RUTA_VECTORES, RUTA_PARIDAD, RUTA_FRONT]}
+            "metricas": met, "rutas": [RUTA_MODELO, RUTA_VECTORES, RUTA_PARIDAD, RUTA_FRONT, RUTA_BOT]}
 
 
 def main():

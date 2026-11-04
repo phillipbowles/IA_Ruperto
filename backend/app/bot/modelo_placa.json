@@ -1,0 +1,72 @@
+{
+  "_generado": "por ml/plantaia_ml/exportar_c.py — no editar",
+  "version": "regla-p3-f07-79b556",
+  "fecha": "2026-10-23",
+  "tipo": "ReglaSueloRiego",
+  "profundidad": 3,
+  "features": [
+    "suelo_mv",
+    "h_desde_riego"
+  ],
+  "flash_B": 111,
+  "nodos": [
+    {
+      "feature": "h_desde_riego",
+      "umbral": 5.5,
+      "si": 1,
+      "no": 2
+    },
+    {
+      "clase": "estresada",
+      "proba": [
+        0.07,
+        0.93,
+        0.0
+      ]
+    },
+    {
+      "feature": "suelo_mv",
+      "umbral": 1716.0,
+      "si": 3,
+      "no": 4
+    },
+    {
+      "clase": "saludable",
+      "proba": [
+        0.982,
+        0.018,
+        0.0
+      ]
+    },
+    {
+      "feature": "suelo_mv",
+      "umbral": 1939.88,
+      "si": 5,
+      "no": 6
+    },
+    {
+      "clase": "estresada",
+      "proba": [
+        0.036,
+        0.883,
+        0.081
+      ]
+    },
+    {
+      "clase": "marchita",
+      "proba": [
+        0.0,
+        0.232,
+        0.768
+      ]
+    }
+  ],
+  "metricas": {
+    "[config. final fija] f1_macro todos, filas fuera de fold juntas (24 ep.)": "0.795",
+    "[config. final fija] exactitud_balanceada todos, filas fuera de fold juntas (24 ep.)": "0.786",
+    "[config. final fija] recall_marchita todos, filas fuera de fold juntas (24 ep.)": "0.654",
+    "[config. final fija] f1_macro sin dudosos, filas fuera de fold juntas (20 ep.)": "0.858",
+    "[config. final fija] exactitud_balanceada sin dudosos, filas fuera de fold juntas (20 ep.)": "0.860",
+    "[config. final fija] recall_marchita sin dudosos, filas fuera de fold juntas (20 ep.)": "0.765"
+  }
+}
