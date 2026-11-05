@@ -490,5 +490,12 @@ degradado y no se recupera después.**
 7. Buffer LittleFS con reenvío por lote
 8. **Arrancar la recolección en serio** + `Anotar.tsx` en paralelo —
    la pantalla de anotación se necesita desde el día 1, no después
-9. `01_eda.ipynb` con lo que haya
+9. ~~`01_eda.ipynb` con lo que haya~~ ✅ — ver
+   [notebooks/01_eda.ipynb](../notebooks/01_eda.ipynb). Dejó tres cosas
+   sabidas que antes eran sospechas: el termistor está **invertido**, no
+   descalibrado (corr −0,98, arreglo de una línea); la cadencia quedó en 30 s de
+   prueba, así que 3011 filas son 25,7 h de planta; y **el N efectivo son 7
+   episodios con 4 observaciones manuales**, lo que hace que un árbol pase de
+   95 % con split aleatorio a 17 % evaluado por episodio. Mientras cada clase se
+   registre en un único bloque de tiempo, el modelo aprende el reloj
 10. `features.py` compartido → modelo → cerrar el loop por la respuesta del POST

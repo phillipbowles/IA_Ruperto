@@ -35,7 +35,7 @@ La serie tiene huecos (reinicios, cortes de luz y las dos semanas del 17/09 al 0
 
 ## Otros sensores
 
-- El termistor marca al revés (38 °C en una noche fría, 9 °C sobre el radiador): no sirve como temperatura.
+- El termistor marca al revés (38 °C en una noche fría, 9 °C sobre el radiador) con el firmware que tiene hoy la placa: no sirve como temperatura. No está roto: el crudo correlaciona +0,95 con el DHT11 y la fórmula correlaciona −0,95, o sea que el cálculo estaba invertido. La corrección ya está escrita pero falta reflashear, y aun así el modelo usa solo la temperatura del DHT11.
 - La luz no está calibrada en lux; de 19 a 22 h hay una lámpara (~1780 mV), así que "luz alta" no siempre es sol.
 - El DHT11 tiene resolución de 1 °C y ±5 % de humedad.
 - Las temperaturas de 26–36 °C del 15 y 16/09 **no son errores**: la maceta estuvo sobre un radiador.

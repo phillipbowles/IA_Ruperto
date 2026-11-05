@@ -20,7 +20,7 @@ La placa de sensores es una ESP32 DevKit enchufada a un cargador de pared. Cada 
 - **Humedad del sustrato** con una sonda **resistiva** (dos electrodos enterrados). Se reporta en milivoltios (`suelo_mv`); más milivoltios quiere decir sustrato más seco.
 - **Temperatura y humedad relativa del aire** con un DHT11 (resolución de 1 °C y ±5 % de humedad: es una referencia gruesa). Con esas dos se calcula el déficit de presión de vapor (VPD), que mide cuánto "tira" el aire del agua de las hojas.
 - **Luz** con una fotorresistencia (LDR), en milivoltios (`luz_mv`). No está calibrada en lux; de noche, con oscuridad total, marca alrededor de 142 mV.
-- Un **termistor** que no se usa: su conversión de temperatura quedó invertida en el firmware y marca frío cuando hace calor.
+- Un **termistor** que no se usa: el sensor anda (sus milivoltios siguen bien a la temperatura), pero la fórmula del firmware instalado en la placa tenía la posición del termistor al revés y por eso `temp_ntc_c` marca frío cuando hace calor. El arreglo ya está escrito; falta volver a cargar la placa. Aun así la temperatura del modelo sale del DHT11, no del termistor.
 
 Cada lectura analógica es la mediana de 9 muestras. Si un sensor falla, el valor viaja vacío (no en cero) y el motivo queda anotado.
 

@@ -18,7 +18,9 @@
 // Versión del firmware: viaja en cada muestra para poder separar en el análisis
 // los datos tomados antes y después de un cambio de calibración o de lógica.
 // 2.0.0: el semáforo pasa a ser la salida del modelo que corre en la placa.
-#define FW_VERSION "2.1.0"
+// 2.1.1: calibración del 2026-11 — fórmula del termistor (estaba invertida), NTC_R0,
+//        LUZ_MV_MAX y corte de hora válida. No toca las features del modelo.
+#define FW_VERSION "2.1.1"
 
 // ─── Pines (fijo, ver CLAUDE.md — no cambiar) ─────────────────────────────
 #define PIN_LUZ          34
@@ -48,7 +50,7 @@
 // se aplasta arriba de ~2500 mV, así que luz_pct nunca llega a 100 y está
 // comprimido en el extremo de luz fuerte. Es un valor de referencia para el LCD:
 // el análisis usa luz_raw y luz_mv, que ahora sí viajan crudos. Ver docs/CALIBRACION.md.
-#define LUZ_MV_MAX      3300
+#define LUZ_MV_MAX      3124   // techo observado del ADC (docs/CALIBRACION.md §2)
 
 // Sonda de suelo RESISTIVA (tipo YL-69/HL-69, dos púas + plaquita LM393).
 // Seco = alta resistencia = AO cerca del riel; mojado = AO bajo. Por eso
@@ -64,16 +66,17 @@
 // el mismo, para que la deriva sea igual en todas las muestras.
 #define SUELO_MS_ESTAB   100
 
-// NTC — divisor: VCC → R_FIJO → VOUT → NTC → GND
-// NTC_R0 calibrado en punto único 2026-09-12 contra el DHT11 (21.0C real con
-// termistor_mv=1096 en simultáneo, antes daba 41.6C con R0=10000). El R_FIJO
-// real de la plaqueta KS0033 no coincide con el nominal de 10k asumido acá;
-// en vez de adivinarlo, se ajustó R0 para que la curva pase por ese punto.
-// Es calibración de un solo punto: confiable cerca de temperatura ambiente,
-// pero para precisión en todo el rango (heladera, sol directo, etc.) hace
-// falta un segundo punto de referencia — ver docs/CALIBRACION.md.
+// NTC — montaje verificado con los datos: VCC → NTC → VOUT → R_FIJO → GND, o sea
+// que termistor_mv SUBE con el calor. Hasta el 2.1.0 la fórmula asumía el montaje
+// contrario y temp_ntc_c salía con el signo cambiado (corr −0,95 contra el DHT11
+// mientras corr(termistor_mv, DHT11) = +0,95): ver docs/CALIBRACION.md §3.
+// El divisor sólo depende del cociente R_FIJO / NTC_R0, no de cada uno: con
+// R_FIJO nominal de 10 k, el ajuste por mínimos cuadrados contra el DHT11 sobre
+// 14 483 muestras (18/09–03/11, 17–26 °C) da NTC_R0 ≈ 20 k (RMSE 0,65 °C).
+// Es una calibración a un solo rango de temperatura: confiable cerca del ambiente,
+// no para heladera o sol directo, y falta verificarla en banco con un 2º punto.
 #define NTC_R_FIJO  10000.0f
-#define NTC_R0       4150.0f
+#define NTC_R0      20000.0f
 #define NTC_T0        298.15f
 #define NTC_BETA     3950.0f
 #define NTC_VCC      3300.0f
@@ -83,7 +86,7 @@
 // epoch. La conversión a hora local se hace recién en el front. Mezclar horas
 // locales entre placa, servidor y el timelapse del celular es fuente de errores
 // al cruzar las series.
-#define EPOCH_MINIMO_VALIDO 1735689600UL   // 2025-01-01 — corte de cordura
+#define EPOCH_MINIMO_VALIDO 1767225600UL   // 2026-01-01 — corte de cordura (una fila con el reloj en 2025 pasó el corte viejo)
 
 // ─── Objetos globales ──────────────────────────────────────────────────────
 DHT              dht(PIN_DHT, DHT_TYPE);
@@ -180,7 +183,7 @@ void leer_sensores() {
   s.ntc_raw = ntc.raw;
   s.ntc_mv  = ntc.mv;
   if (ntc.mv > 0 && ntc.mv < (uint16_t)NTC_VCC) {
-    float r    = NTC_R_FIJO * ntc.mv / (NTC_VCC - ntc.mv);
+    float r    = NTC_R_FIJO * (NTC_VCC - ntc.mv) / ntc.mv;   // R del NTC, que está del lado de VCC
     float tk   = 1.0f / (1.0f/NTC_T0 + log(r/NTC_R0)/NTC_BETA);
     s.temp_ntc = tk - 273.15f;
     s.ntc_ok   = !isnan(s.temp_ntc);
