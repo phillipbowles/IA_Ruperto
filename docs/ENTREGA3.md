@@ -435,6 +435,36 @@ rondas 2–5.
   evaluación lo configura; en la ronda 2 por eso ninguna respuesta citó
   fuentes y en "cuidados" Ruperto dijo no tener la información.
 
+**D218 — Memoria de la charla y línea de tiempo** (2026-11-04), por la
+primera charla real en Telegram con la placa de vuelta (04/11 19:28). Ruperto
+contestó bien "¿cómo estás?", pero "¿hace cuánto no estás estresado o
+marchito?" dio "hace dos semanas, el 20/10" (el 29/10 estaba marchito),
+"decime las fechas de esos estados" lo contestó como si fuera otra cosa y
+"¿cuándo fueron los últimos días?" dio el 15 y el 17/10. Tres causas y sus
+arreglos:
+
+- **Memoria.** El guardrail y la búsqueda veían sólo el mensaje actual (la
+  generación sí recibía los 6 turnos). Ahora el guardrail recibe el último
+  intercambio, y una repregunta corta (≤ 10 palabras) se busca junto con la
+  pregunta anterior ("¿y para mi perro?" → "¿Sos tóxico para mi gato? ¿y
+  para mi perro?"). La memoria vence a las **2 horas** (una charla de ayer
+  no es contexto de hoy), se **rearma desde `conversaciones`** si el proceso
+  arrancó de cero (un redeploy la borraba) y guarda también `/estado` y
+  `/riego`.
+- **Línea de tiempo.** El bloque de 7 días tenía mV por día pero no el
+  estado: ahora cada día dice el estado según la regla recalculada muestra
+  por muestra ("marchito 100 %"), los **huecos sin datos** (> 2 h), los
+  **riegos durante un hueco** (la sonda vuelve ≥ 250 mV más húmeda que antes
+  de apagarse: el 04/11 lo regaron con la placa apagada) y **la última vez que
+  estuvo estresado o marchito** (sin contar la recuperación post-riego).
+- **Recencia.** La búsqueda semántica no entiende "lo último": para las
+  intenciones estado, historial y riego entran además los 3 episodios
+  etiquetados más recientes por fecha (`recuperar.recientes`).
+
+Además, si un modelo de la cadena sigue saturado (5xx) después del
+reintento, contesta el siguiente en vez de fallar. La charla real quedó como
+escenario `charla` de `probar.py` (ronda 6: 7/7 bien).
+
 ---
 
 ## 3. Arquitectura

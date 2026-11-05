@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict, deque
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import persona
@@ -112,23 +112,44 @@ def solo_pasado(fragmentos: list[Fragmento], ahora: datetime) -> list[Fragmento]
 
 
 class Memoria:
-    """Últimos `TURNOS_MEMORIA` pares (pregunta, respuesta) por chat.
+    """Últimos `TURNOS_MEMORIA` pares (pregunta, respuesta) por chat, de las
+    últimas `VIGENCIA` (D218).
 
     Se guarda la pregunta pelada, no el turno con los bloques: el estado de
-    hace 10 minutos no tiene que competir con el de ahora.
+    hace 10 minutos no tiene que competir con el de ahora. Pasada la vigencia
+    la charla se da por terminada: "¿y ahora?" de mañana no se refiere a lo de
+    hoy. Vive en el proceso; `responder` la reconstruye desde `conversaciones`
+    cuando un chat no tiene nada (después de un redeploy).
     """
 
-    def __init__(self, turnos: int = TURNOS_MEMORIA):
-        self._chats: dict[int, deque[tuple[str, str]]] = defaultdict(lambda: deque(maxlen=turnos))
+    VIGENCIA = timedelta(hours=2)
 
-    def agregar(self, chat_id: int, pregunta: str, respuesta: str) -> None:
-        self._chats[chat_id].append((pregunta, respuesta))
+    def __init__(self, turnos: int = TURNOS_MEMORIA, desde_db: bool = False):
+        self.turnos = turnos
+        self.desde_db = desde_db           # la del proceso sí; las de prueba no
+        self._chats: dict[int, deque[tuple[datetime, str, str]]] = defaultdict(
+            lambda: deque(maxlen=turnos))
+
+    def agregar(self, chat_id: int, pregunta: str, respuesta: str,
+                ts: datetime | None = None) -> None:
+        self._chats[chat_id].append((ts or datetime.now(UTC), pregunta, respuesta))
+
+    def _vigentes(self, chat_id: int) -> list[tuple[datetime, str, str]]:
+        limite = datetime.now(UTC) - self.VIGENCIA
+        return [x for x in self._chats.get(chat_id, ()) if x[0] >= limite]
+
+    def vacia(self, chat_id: int) -> bool:
+        return not self._chats.get(chat_id)
 
     def historial(self, chat_id: int) -> list[dict]:
         out = []
-        for p, r in self._chats.get(chat_id, ()):
+        for _, p, r in self._vigentes(chat_id):
             out += [{"role": "user", "text": p}, {"role": "model", "text": r}]
         return out
+
+    def ultimo_intercambio(self, chat_id: int) -> tuple[str, str] | None:
+        v = self._vigentes(chat_id)
+        return (v[-1][1], v[-1][2]) if v else None
 
 
 def contenidos(memoria: Memoria, chat_id: int, turno: str) -> list[dict]:

@@ -97,3 +97,34 @@ emojis ni apodos, el ambiente sólo cuando dice algo.
 
 Pendiente de medir: una ronda completa con `gemini-3.5-flash` cuando vuelva
 su cupo diario, con todas las correcciones juntas.
+
+## v4 — memoria y línea de tiempo (D218), ronda 6
+
+La primera charla real con la placa de vuelta (04/11, 19:28, Telegram):
+
+> **👤** Jajajaja q bien, decime, hace cuanto q no estas estresado o marchito?
+> **🌿** Estoy entero y sin caídas desde hace dos semanas. El último episodio
+> registrado quedó atrás el 20 de octubre, […]
+>
+> **👤** Decime cuales fueron las fechas de esos estados, los umtimos registros
+> **🌿** Mis últimos registros muestran que estuve bien y firme, sin sobresaltos
+> por ahora. Tierra húmeda. […]
+
+La misma charla después de D218 (ronda 6, `gemini-3.5-flash-lite`):
+
+> **👤** Jajajaja q bien, decime, hace cuanto q no estas estresado o marchito?
+> **🌿** No me acuerdo de lo que es estar marchito desde el 29 de octubre.
+> Aunque la placa estuvo apagada varios días y ese rato es un misterio, cuando
+> volvió a arrancar el 4 de noviembre ya estaba firme y saludable. […]
+>
+> **👤** ¿Cuándo te regaron por última vez?
+> **🌿** No tengo la hora exacta de mi último riego porque ocurrió mientras la
+> placa estaba apagada, entre el 29 de octubre y el 4 de noviembre. La tierra
+> estaba más seca antes y volvió húmeda. […]
+>
+> **👤** ¿Sos tóxico para mi gato? → sí, ASPCA · **👤** ¿y para mi perro?
+> **🌿** Sí, también soy tóxico para tu perro. […] 📚 Fuente: ASPCA, NC State Extension
+
+Todas las respuestas en [iteraciones/ronda6_2026-11-04.md](iteraciones/ronda6_2026-11-04.md).
+Queda: en "las fechas de esos estados" supone que la tierra "se fue secando"
+durante el hueco, que no lo sabe.

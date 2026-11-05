@@ -43,8 +43,18 @@ LETRA = [P("¿Cómo está mi planta?"), P("¿Necesita riego hoy?"),
          P("¿Qué me recomendás hacer esta semana?")]
 
 ESCENARIOS = {
-    # Sensores caídos desde el 29/10.
-    "hoy": (None, LETRA + [P("¿Sos tóxico para mi gato?", fuente=True),
+    # 04/11 22:28 UTC: la placa volvió a las 12:39 tras 5 días apagada y regada en
+    # el medio. Es la charla real de Telegram que salió mal, más repreguntas (D218).
+    "charla": (datetime(2026, 11, 4, 22, 28, tzinfo=UTC),
+               [P("Pa, pero de estado? Como estas?"),
+                P("Jajajaja q bien, decime, hace cuanto q no estas estresado o marchito?"),
+                P("Decime cuales fueron las fechas de esos estados, los umtimos registros"),
+                P("¿Cuándo te regaron por última vez?"),
+                P("¿Sos tóxico para mi gato?", fuente=True),
+                P("¿y para mi perro?", fuente=True),
+                P("gracias Ruperto!")]),
+    # 03/11: sensores caídos desde el 29/10.
+    "caidos": (datetime(2026, 11, 3, 21, 0, tzinfo=UTC), LETRA + [P("¿Sos tóxico para mi gato?", fuente=True),
                            P("Pasame una receta de ñoquis", dominio=False)]),
     # 19/10 22:35 UTC: sonda en 1934 mV, último riego el 17/10 (como maceta-02).
     "sed": (datetime(2026, 10, 19, 22, 35, tzinfo=UTC),
@@ -89,7 +99,7 @@ def chequear(p: P, r, escenario: str) -> list[str]:
         mal.append("jerga técnica sin que la pidan")
     if p.fuente and "📚" not in t:
         mal.append("sin fuente al pie")
-    if escenario == "hoy":
+    if escenario == "caidos":
         sobre_ahora = not p.fuente
         inicio = " ".join(re.split(r"(?<=[.!?])\s+", t)[:2])
         if sobre_ahora and not SENSORES.search(inicio):
