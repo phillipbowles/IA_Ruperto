@@ -1,8 +1,10 @@
 """Handlers de Telegram (python-telegram-bot ≥ 21, polling). Finos a propósito:
 toda la lógica está en `responder.responder` y `responder.comando`, que se
-testean sin Telegram."""
+testean sin Telegram. Los avisos (§6) los manda `emisor.bucle`, una tarea de
+asyncio que arranca con la Application."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from telegram import Update
@@ -10,7 +12,7 @@ from telegram.constants import ChatAction
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from ..database import SessionLocal
-from . import recuperar
+from . import emisor, recuperar
 from .responder import _gemini_default, comando, responder
 
 log = logging.getLogger("ruperto.telegram")
@@ -46,8 +48,20 @@ async def _error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     log.error("error en un handler", exc_info=context.error)
 
 
+async def _arrancar_avisos(app: Application) -> None:
+    # Tarea propia y no JobQueue: no suma el extra [job-queue] de python-telegram-bot.
+    app.bot_data["avisos"] = asyncio.create_task(emisor.bucle(app.bot), name="avisos")
+
+
+async def _parar_avisos(app: Application) -> None:
+    tarea = app.bot_data.pop("avisos", None)
+    if tarea:
+        tarea.cancel()
+
+
 def construir(token: str) -> Application:
-    app = Application.builder().token(token).build()
+    app = (Application.builder().token(token)
+           .post_init(_arrancar_avisos).post_stop(_parar_avisos).build())
     app.add_handler(CommandHandler(list(COMANDOS), _comando))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _texto))
     app.add_error_handler(_error)

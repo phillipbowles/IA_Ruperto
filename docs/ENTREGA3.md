@@ -21,7 +21,7 @@ Fecha de arranque: 2026-11-03. Entrega: **domingo 15/11, 23:59**.
 | Documentos científicos de la especie | Corpus limpio con URL y fecha de acceso | `rag/corpus/ciencia/` |
 | Nombre y personalidad | **Ruperto** (§2, D1) | `backend/app/bot/persona.py` |
 | Usar dataset y modelo de la Tarea 2 | Predicción de la placa + regla recalculada en el server | `backend/app/bot/modelo.py` |
-| La planta avisa cuando necesita riego y manda mediciones cada 30 min | Avisos (§6) — **quién los emite está pendiente (D7)** | `backend/app/bot/avisos.py` |
+| La planta avisa cuando necesita riego y manda mediciones cada 30 min | Avisos (§6), emitidos por el servicio del bot (D7) | `backend/app/bot/avisos.py`, `backend/app/bot/emisor.py` |
 | No responder fuera del dominio de la planta | Guardrail de dos capas (D5) | `backend/app/bot/dominio.py` |
 | ≥ 5 conversaciones documentadas | Log en la tabla `conversaciones` + capturas | `docs/entrega3/conversaciones/` |
 | PDF ≤ 3 páginas | Diagrama, RAG, personalidad, resultados y mejoras | `docs/entrega3/informe_final/` |
@@ -98,11 +98,19 @@ mide (§7).
 Persistido en la tabla `chats_telegram` (no en memoria: un redeploy no puede
 olvidar a quién avisar).
 
-**D7 — Quién emite los avisos de 30 min y de riego: PENDIENTE** (2026-11-03,
-el equipo lo decide más adelante). Opciones: (a) el servicio del bot, a partir
-de lo que la placa sube; (b) la ESP32 llamando directo a la API de Telegram.
-Mientras no se decida, el contenido de los mensajes (§6) se arma en
-`avisos.py` como funciones puras, que sirven para cualquiera de las dos.
+**D7 — Quién emite los avisos de 30 min y de riego: el servicio del bot**
+(planteada el 2026-11-03, resuelta el 2026-11-15 como opción (a)). Las opciones
+eran (a) el servicio del bot, a partir de lo que la placa sube, y (b) la ESP32
+llamando directo a la API de Telegram. Queda (a): la placa no cambia (ni
+firmware ni token de Telegram en ella), los avisos usan el mismo contexto que
+el chat y siguen saliendo aunque la placa esté caída (para decir que lo está).
+`avisos.py` sigue armando el contenido como funciones puras; `emisor.py` lee
+la base y envía: una tarea de asyncio arrancada en el `post_init` de la
+Application, sin el extra `[job-queue]` de python-telegram-bot. Revisa el riego
+cada 5 min y manda la medición cada 30 (la primera al arrancar). Un chat que
+bloqueó al bot (`Forbidden`) queda desuscripto; cualquier otro error de envío
+se loguea y no corta a los demás chats. Sin LLM y sin migración: alcanza con
+`chats_telegram.ultimo_aviso_riego`.
 
 **D8 — El modelo de la Tarea 2 entra por dos caminos** (2026-11-03). (1) La
 predicción que manda la placa (`predicciones`, con su `modelo_version`). (2) La
@@ -479,7 +487,8 @@ servicio bot (misma imagen: python -m app.bot)     │ SQL
  ├─ recuperar.py ── top-k sobre indice/ (historial + ciencia + proyecto)
  ├─ prompt.py    ── persona + contexto + fragmentos numerados + pregunta
  ├─ gemini.py    ── generación
- ├─ avisos.py    ── texto de los avisos (D7 decide quién los manda)
+ ├─ avisos.py    ── texto de los avisos
+ ├─ emisor.py    ── los manda: medición c/30 min, riego revisado c/5 min (D7)
  └─ log en `conversaciones`
 
 offline: rag/corpus/ + data/*.csv ── rag/construir_indice.py ──► backend/app/bot/indice/
@@ -614,7 +623,7 @@ conversaciones   id, chat_id, ts, pregunta, en_dominio, intencion,
 
 ---
 
-## 6. Avisos (pendiente de D7)
+## 6. Avisos (D7: los emite el servicio del bot)
 
 - **Mediciones cada 30 min**: suelo, T, HR, luz, clase actual y tendencia, en
   la voz de Ruperto (corto, sin LLM o con una sola llamada barata).
@@ -645,7 +654,7 @@ Telegram con capturas.
 |---|---|---|
 | T1 | Corpus científico + documentos del proyecto + historial, `rag/construir_indice.py`, índice generado, snapshot nuevo | `feat/entrega3-corpus-rag` |
 | T2 | Bot: `backend/app/bot/` completo salvo el envío de avisos, migración 0006, tests, exportador → `modelo_placa.json` del backend | `feat/entrega3-bot` |
-| T3 | Avisos según D7 | después de decidir D7 |
+| T3 | Avisos según D7 (`emisor.py`) | `feat/entrega3-avisos` |
 | T4 | Evaluación (§7), conversaciones e informe PDF | al final |
 
 Manual (equipo): reenchufar la placa y flashear el 2.1.0; crear el bot en

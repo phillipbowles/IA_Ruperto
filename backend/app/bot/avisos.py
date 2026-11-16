@@ -1,8 +1,7 @@
 """Texto de los avisos (docs/ENTREGA3.md §6). Sólo funciones puras.
 
-Quién los manda y cuándo está pendiente (D7): el servicio del bot o la ESP32.
-Acá se arma el contenido y se decide si corresponde, sin scheduler, sin red y
-sin base, para que sirva para cualquiera de las dos opciones.
+Los manda el servicio del bot (D7), desde `emisor.py`. Acá se arma el
+contenido y se decide si corresponde, sin scheduler, sin red y sin base.
 
 Los mismos textos responden `/estado` y `/riego` (sin LLM: no gastan cupo y
 funcionan aunque Gemini esté caído).
