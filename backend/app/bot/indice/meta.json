@@ -3,13 +3,13 @@
   "modelo_embed": "gemini-embedding-001",
   "dim": 768,
   "task_type": "RETRIEVAL_DOCUMENT",
-  "generado": "2026-11-05T13:36:19Z",
-  "n": 91,
+  "generado": "2026-11-18T17:57:58Z",
+  "n": 100,
   "n_por_fuente": {
     "ciencia": 20,
-    "historial": 59,
+    "historial": 68,
     "proyecto": 12
   },
-  "snapshot": "mediciones_raw_2026-11-03.csv",
-  "hash_corpus": "cc2a0df61526b2e0a7844418f1e5d2e4cb35c290e0239d816592b2c22bd67b5c"
+  "snapshot": "mediciones_raw_2026-11-18.csv",
+  "hash_corpus": "3a98fd446b07cf1fbb408d53250d92e1c95d6efc0bb50c0df848cfd62f93d182"
 }
