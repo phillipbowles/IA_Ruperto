@@ -49,18 +49,17 @@ def texto_medicion(ctx: Contexto) -> str:
                 f"{u.edad_min // 60} h). No sé cómo estoy ahora: ¿alguien puede revisar "
                 "que la placa esté enchufada?")
     clase = _clase(ctx)
-    partes = [f"{EMOJI.get(clase, '⚪')} {ESTADO.get(clase, 'mi modelo no pudo decidir')} "
-              f"({local(u.ts)})"]
+    estado = ESTADO.get(clase, "mi modelo no pudo decidir")
+    partes = [f"{EMOJI.get(clase, '⚪')} {estado[0].upper() + estado[1:]} · {local(u.ts)}"]
     if u.suelo_mv is not None:
-        partes.append(f"Tierra: {tierra_simple(u.suelo_mv)} ({u.suelo_mv:.0f} mV, {_tendencia(ctx)})")
+        partes.append(f"• Tierra: {tierra_simple(u.suelo_mv)} · {u.suelo_mv:.0f} mV · {_tendencia(ctx)}")
     else:
-        partes.append("Tierra: sin dato")
+        partes.append("• Tierra: sin dato")
     aire = [x for x in (f"{u.temp_c:.1f} °C" if u.temp_c is not None else None,
                         f"humedad {u.hum_pct:.0f} %" if u.hum_pct is not None else None) if x]
-    partes.append(f"Ambiente: {aire_simple(u.temp_c, u.hum_pct) or 'sin dato'}"
-                  + (f" ({', '.join(aire)})" if aire else ""))
+    partes.append("• Aire: " + " · ".join([aire_simple(u.temp_c, u.hum_pct) or "sin dato", *aire]))
     if u.luz_mv is not None:
-        partes.append(f"Luz: {u.luz_mv:.0f} mV")
+        partes.append(f"• Luz: {u.luz_mv:.0f} mV")
     if ctx.coinciden is False:
         partes.append(f"(la placa dice {ESTADO[ctx.placa.clase]}: todavía corre el modelo "
                       f"{ctx.placa.modelo_version})")

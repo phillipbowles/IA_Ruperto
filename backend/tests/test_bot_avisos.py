@@ -19,9 +19,9 @@ def ctx(suelo=1800.0, edad=5, h=30.0, riego=None, placa=None, tendencia=-10.0):
 
 def test_texto_medicion():
     t = avisos.texto_medicion(ctx())
-    assert t.startswith("🟡 estoy algo caído")
-    assert "Tierra: secándose (1800 mV" in t and "estable" in t and "22.4 °C" in t
-    assert "humedad 58 %" in t and "templado" in t
+    assert t.startswith("🟡 Estoy algo caído")
+    assert "• Tierra: secándose · 1800 mV" in t and "estable" in t and "22.4 °C" in t
+    assert "humedad 58 %" in t and "templado" in t and "• Aire:" in t and "• Luz:" in t and "))" not in t
     assert "secándose" in avisos.texto_medicion(ctx(tendencia=120))
 
 
