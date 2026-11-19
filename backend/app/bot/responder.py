@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -64,6 +65,25 @@ def _gemini_default():
     return _gemini
 
 
+_gemini_voz = None
+
+
+def _gemini_para_voz():
+    """Con `GEMINI_API_KEY_VOZ`, las charlas habladas (pestaña web y notas de
+    voz) usan otra clave: su cupo no le saca respuestas al bot de texto (D224).
+    Sin ella, la de siempre."""
+    global _gemini_voz
+    clave = os.getenv("GEMINI_API_KEY_VOZ", "").strip()
+    if not clave:
+        return _gemini_default()
+    if _gemini_voz is None:
+        from .gemini import ClienteGemini
+        _gemini_voz = ClienteGemini(api_key=clave)
+        if recuperar._embedder is None:      # proceso sin la clave del bot
+            recuperar.configurar(embedder=_gemini_voz.embeber_consulta)
+    return _gemini_voz
+
+
 def _loguear(db: Session, chat_id: int, pregunta: str, r: Respuesta) -> None:
     try:
         db.add(Conversacion(chat_id=chat_id, pregunta=pregunta, en_dominio=r.en_dominio,
@@ -81,9 +101,11 @@ def _loguear(db: Session, chat_id: int, pregunta: str, r: Respuesta) -> None:
 async def responder(texto: str, chat_id: int, db: Session, *, gemini=None,
                     buscar: Callable[..., list[recuperar.Fragmento]] | None = None,
                     ahora: datetime | None = None,
-                    memoria: prompt.Memoria | None = None) -> Respuesta:
+                    memoria: prompt.Memoria | None = None, voz: bool = False) -> Respuesta:
+    """`voz=True`: la respuesta se va a escuchar (nota de voz o la pestaña
+    «Hablar con Ruperto»), así que se pide corta y sin símbolos (D221)."""
     t0 = time.perf_counter()
-    gemini = gemini or _gemini_default()
+    gemini = gemini or (_gemini_para_voz() if voz else _gemini_default())
     buscar = buscar or recuperar.buscar
     memoria = memoria if memoria is not None else _memoria
     r = Respuesta(texto="", en_dominio=None, intencion=None, modelo=getattr(gemini, "modelo", None))
@@ -116,7 +138,7 @@ async def responder(texto: str, chat_id: int, db: Session, *, gemini=None,
             frags = prompt.solo_pasado(frags, ctx.ahora)
             r.fragmentos = [(f.id, f.score) for f in frags]
             turno = prompt.turno_usuario(contexto.texto_estado(ctx), contexto.texto_dias(ctx),
-                                         frags, texto, simple=contexto.texto_simple(ctx))
+                                         frags, texto, simple=contexto.texto_simple(ctx), voz=voz)
             crudo = await gemini.generar(prompt.system(), prompt.contenidos(memoria, chat_id, turno))
             r.modelo = getattr(gemini, "ultimo_modelo", None) or r.modelo
             r.texto, citados = prompt.citas(prompt.sin_rotulos(crudo), frags)

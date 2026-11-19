@@ -29,6 +29,9 @@ dependencies = [
     # Montevideo (python:3.11-slim no trae la base de zonas del sistema).
     "python-telegram-bot>=21.0,<23",
     "tzdata>=2024.1",
+    # La voz de Ruperto (app/bot/voz.py): HTTP directo a ElevenLabs. Ya venía
+    # con python-telegram-bot y google-genai; se declara porque se importa.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

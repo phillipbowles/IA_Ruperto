@@ -473,6 +473,106 @@ Además, si un modelo de la cadena sigue saturado (5xx) después del
 reintento, contesta el siguiente en vez de fallar. La charla real quedó como
 escenario `charla` de `probar.py` (ronda 6: 7/7 bien).
 
+### Decisiones de la voz («Talking Ruperto»)
+
+**D219 — La voz es una capa sobre `responder`, no otro bot** (2026-11-19).
+La idea: que a Ruperto se le pueda hablar y conteste en voz alta, como un
+Talking Tom que además sabe cómo está. Se evaluaron tres caminos:
+
+- *(a) Sólo Telegram*: nota de voz → texto → el flujo de siempre → nota de
+  voz. Barato de hacer, pero no hay avatar: es un chat con audios.
+- *(b) Un agente conversacional de ElevenLabs* (tiempo real, con su propio
+  LLM). Es lo que mejor suena, pero el cerebro pasa a ser de ElevenLabs: habría
+  que duplicar ahí el guardrail, el contexto SQL, el RAG y el log, o exponer
+  todo como herramientas. Dos cerebros que se desincronizan, y la consigna
+  pide Gemini.
+- *(c) Envolver `responder` con oído y voz*, y exponerlo por dos canales.
+
+Se eligió **(c)**. `backend/app/bot/voz.py` transcribe (ElevenLabs Scribe),
+llama al mismo `responder` y sintetiza la respuesta (ElevenLabs TTS). El
+guardrail, el RAG, la memoria y la tabla `conversaciones` son los mismos para
+el texto de Telegram, la nota de voz de Telegram y la web: una sola fuente de
+verdad para lo que Ruperto dice. La voz nunca es condición para contestar: si
+ElevenLabs falla, la respuesta sale en texto.
+
+**D220 — Canal web: la pestaña «Hablar con Ruperto»** (2026-11-19). El front
+suma una tercera vista (`#hablar`) con **el mismo avatar del tablero**
+(`LirioSvg`, extraído de `AvatarLirio`): la pose sale del estado actual y la
+boca se abre con el volumen real del audio (un `AnalyserNode` de Web Audio
+escribe la variable CSS `--boca` en cada cuadro). Una vuelta: tocar el
+micrófono → graba y corta sola al detectar silencio → `POST
+/api/v1/ruperto/hablar` → se muestra lo que se entendió y la respuesta, y
+Ruperto la dice. También se le puede escribir, y si se lo toca se queja de las
+cosquillas. El router (`backend/app/routers/ruperto.py`) vive en el servicio
+**backend**, no en el del bot: el front ya le habla a ese servicio y el bot
+no expone HTTP. Por eso el backend ahora necesita las variables de Gemini del
+bot (§5.6).
+
+- Los chats de la web no tienen `chat_id` de Telegram: se deriva uno negativo
+  de la sesión del navegador, por debajo de −10¹⁵ (`chat_id_web`), un rango
+  que Telegram no usa. Así `conversaciones` no cambia de esquema y las charlas
+  web se distinguen por el rango.
+- La pestaña es pública y cada charla gasta cupo de Gemini y créditos de
+  ElevenLabs. Frenos: límite por IP (8/min, 60/h; reparte entre visitantes,
+  pero la IP sale de una cabecera y se puede falsear), **tope global** de
+  charlas (30/min, 600/día; ese no se esquiva) y los topes diarios de `voz.py`
+  (20 000 caracteres sintetizados y 400 audios transcriptos por servicio).
+  Viven en la memoria del proceso: un redeploy los pone en cero.
+
+**D221 — Lo que se escucha no es lo que se lee** (2026-11-19). Una respuesta
+pensada para Telegram (80 palabras, viñetas, "1567 mV", pie "📚 Fuente")
+leída en voz alta es larga y suena a planilla. Dos arreglos:
+
+- `responder(voz=True)` agrega al turno la nota `MODO VOZ`
+  (`persona.NOTA_VOZ`): 45 palabras como máximo, oraciones habladas, sin
+  viñetas ni símbolos. El resto del prompt y las reglas no cambian.
+- `voz.texto_hablado` limpia lo que va al sintetizador: saca el pie de
+  fuentes, los emojis y las viñetas, y pasa las unidades a palabras ("21,4
+  °C" → "21,4 grados", "69 %" → "69 por ciento"). El texto que se muestra y se
+  loguea es el original; sólo cambia lo que se pronuncia.
+
+**D222 — Notas de voz en Telegram** (2026-11-19). El bot acepta notas de
+voz, audios y videomensajes de hasta 60 s. Contesta con el texto (precedido
+de «🎙️ lo que entendió», que sirve de subtítulo y deja ver un error de
+transcripción) y con una nota de voz. Telegram sólo muestra como nota de voz
+un Ogg/Opus: se pide `opus_48000_32` y **se verifica el contenedor** (`OggS`)
+en vez de suponerlo; si no viniera en Ogg, el bot lo aprende y desde ahí pide
+mp3 y lo manda como audio. Sin `ELEVENLABS_API_KEY`, contesta que no puede
+escuchar (`persona.SIN_OIDOS`) y el resto del bot sigue igual.
+
+**D223 — Degradación, voz y costos** (2026-11-19).
+
+- **Sin clave o sin créditos, la pestaña sigue hablando**: usa el dictado y la
+  síntesis del navegador (Web Speech API) contra `POST /ruperto/mensaje`.
+  Suena peor y el dictado no existe en Firefox (ahí sólo se le escribe), pero
+  no hay pantalla rota. El pie de la pestaña dice qué voz está usando.
+- **Modelos**: `eleven_flash_v2_5` para hablar (el de menor latencia y el más
+  barato; con `language_code=es`) y `scribe_v2` para oír. Se cambian por
+  variable de entorno.
+- **Voz**: `ELEVENLABS_VOZ_ID`; si no está, se le pregunta a la cuenta qué
+  voces tiene y se usa una de ellas. Las prefabricadas cambian de id y dependen
+  de la cuenta, así que no hay un id fijo en el código. Todas las prefabricadas
+  hablan español con acento neutro; una voz rioplatense sale de la Voice
+  Library (plan pago para usarla por API) o de Voice Design.
+- **Textos fijos** (saludo, cosquillas, rechazos, errores): su audio se
+  sintetiza una vez por proceso y se reutiliza.
+- **Costo de referencia**: una respuesta hablada ronda los 250 caracteres, y
+  una pregunta, 5 s de audio. El plan gratuito de ElevenLabs alcanza para
+  decenas de charlas por mes, no para una demo abierta: por eso los topes.
+- **Pendiente de validar con la clave real** (se desarrolló contra un
+  ElevenLabs simulado): `python backend/scripts/probar_voz.py` comprueba la
+  clave, las voces, texto → mp3, texto → opus en Ogg y el camino de vuelta
+  (audio → texto). Hay que correrlo una vez al cargar la clave.
+
+**D224 — Clave de Gemini aparte para la voz** (2026-11-19).
+
+Las charlas habladas (pestaña web y notas de voz) hacen dos llamadas a Gemini
+por pregunta y la pestaña es pública: con la misma clave, una tarde de gente
+hablándole a Ruperto deja sin cupo al bot de texto. Con `GEMINI_API_KEY_VOZ`
+(opcional) `responder(voz=True)` usa un cliente con esa clave; sin ella, la de
+siempre. Los modelos son los mismos (`GEMINI_MODELO*`). La búsqueda en el
+índice sigue embebiendo con la clave del bot si el proceso la tiene.
+
 ---
 
 ## 3. Arquitectura
@@ -482,6 +582,7 @@ ESP32 ──POST cada 5 min──► backend (FastAPI) ──► Postgres (Railw
                                                    ▲
 servicio bot (misma imagen: python -m app.bot)     │ SQL
  ├─ Telegram (polling) ── /start /estado /riego /silencio /ayuda + texto libre
+ │                        + notas de voz (voz.py ⇄ ElevenLabs, D222)
  ├─ dominio.py   ── clasifica la pregunta (en_dominio, intención)
  ├─ contexto.py  ── estado en vivo, tendencia, riegos, predicciones ───────┘
  ├─ recuperar.py ── top-k sobre indice/ (historial + ciencia + proyecto)
@@ -492,6 +593,10 @@ servicio bot (misma imagen: python -m app.bot)     │ SQL
  └─ log en `conversaciones`
 
 offline: rag/corpus/ + data/*.csv ── rag/construir_indice.py ──► backend/app/bot/indice/
+
+front «Hablar con Ruperto» ── micrófono ──► backend /api/v1/ruperto/hablar
+   ▲ audio + texto                            └─ voz.py: oír (ElevenLabs) → responder → hablar (ElevenLabs)
+   └──────────────────────────────────────────── el mismo responder de arriba (D219, D220)
 ```
 
 Punto de entrada único para responder, sin Telegram de por medio (lo usan el
@@ -620,6 +725,35 @@ conversaciones   id, chat_id, ts, pregunta, en_dominio, intencion,
 `TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY`, `GEMINI_MODELO`,
 `GEMINI_MODELO_EMBED`, `DATABASE_URL`, `BOT_DISPOSITIVO`. Van a
 `.env.example` (sin valores) y a Railway; nunca al repo.
+
+Para la voz (D219–D223), en **los dos servicios** (bot y backend):
+`ELEVENLABS_API_KEY` y, opcionales, `GEMINI_API_KEY_VOZ` (D224), `ELEVENLABS_VOZ_ID`,
+`ELEVENLABS_MODELO_TTS`, `ELEVENLABS_MODELO_STT`, `VOZ_MAX_CHARS_DIA`,
+`VOZ_MAX_AUDIOS_DIA`. El **backend** además necesita las de Gemini que ya
+tiene el bot (`GEMINI_MODELO`, `GEMINI_MODELO_GUARDRAIL`, `BOT_DISPOSITIVO`;
+`GEMINI_API_KEY` ya la tenía por el análisis de fotos), porque la pestaña
+«Hablar con Ruperto» corre `responder` ahí. Límites de la pestaña:
+`RUPERTO_WEB_POR_MINUTO`, `RUPERTO_WEB_POR_HORA`,
+`RUPERTO_WEB_GLOBAL_POR_MINUTO`, `RUPERTO_WEB_GLOBAL_POR_DIA`.
+
+### 5.7 Voz (`voz.py`, `routers/ruperto.py`)
+
+```python
+charla = await voz.conversar(audio, mime, chat_id, db, voz=cliente)   # o texto=...
+# Charla: pregunta (lo que se entendió), respuesta (la Respuesta de siempre),
+#         texto, audio (bytes | None), audio_mime, error_voz
+```
+
+| Endpoint (servicio backend) | Entra | Sale |
+|---|---|---|
+| `GET /api/v1/ruperto/estado` | — | estado, datos simples, `voz` y `chat` (qué puede hacer el servidor) |
+| `POST /api/v1/ruperto/hablar` | audio crudo (webm, ogg, mp4…), `X-Ruperto-Sesion` | pregunta, respuesta, `audio_b64` (mp3), `error_voz` |
+| `POST /api/v1/ruperto/mensaje` | `{"texto", "con_audio"}` | lo mismo |
+| `GET /api/v1/ruperto/frase/{saludo\|cosquillas}` | `n` | texto fijo y su audio (cacheado) |
+
+`error_voz` ∈ `sin-voz` · `sin-creditos` · `no-se-entendio` · `error: …`:
+dice por qué no hay audio (el front cae a la voz del navegador) o que no se
+entendió la pregunta (ahí no se llama a `responder` ni se loguea nada).
 
 ---
 

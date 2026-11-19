@@ -54,3 +54,38 @@ export interface AnalisisFoto {
 /** ia = Claude mira la foto; vision = segmentación por color y ángulo de las
  *  hojas (backend/app/vision.py), sin IA generativa. */
 export type MetodoAnalisis = "ia" | "vision";
+
+/** `GET /api/v1/ruperto/estado`: cómo está Ruperto y qué puede hacer el servidor. */
+export interface EstadoRuperto {
+  nombre: string;
+  estado: Clase | null;
+  sensores_caidos: boolean;
+  edad_min: number | null;
+  tierra: string | null;
+  temperatura_c: number | null;
+  humedad_pct: number | null;
+  h_desde_riego: number | null;
+  voz: boolean;     // ElevenLabs configurado: el servidor oye y habla
+  chat: boolean;    // Gemini configurado: puede contestar
+  saludo: string;
+}
+
+/** Una vuelta de charla (`POST /ruperto/hablar` o `/ruperto/mensaje`). */
+export interface CharlaRuperto {
+  pregunta: string;
+  respuesta: string;
+  estado: Clase | null;
+  en_dominio: boolean | null;
+  intencion: string | null;
+  audio_b64: string | null;
+  audio_mime: string | null;
+  error_voz: string | null;
+  error: string | null;
+  latencia_ms: number;
+}
+
+export interface FraseRuperto {
+  texto: string;
+  audio_b64: string | null;
+  audio_mime: string | null;
+}

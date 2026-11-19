@@ -28,4 +28,4 @@ def test_handlers_de_telegram_se_registran():
     for h in app.handlers[0]:
         cmds |= set(getattr(h, "commands", ()))
     assert cmds == set(COMANDOS)
-    assert len(app.handlers[0]) == 2
+    assert len(app.handlers[0]) == 3      # comandos, texto y voz (D222)

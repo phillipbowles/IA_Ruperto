@@ -197,6 +197,15 @@ contrato (índice, tablas, interfaces) y el **registro de decisiones** viven en
 se anota ahí. `backend/app/bot/indice/` es **GENERADO** por
 `rag/construir_indice.py`: no se edita a mano.
 
+**Ruperto también habla** (D219–D224): `backend/app/bot/voz.py` envuelve
+`responder` con ElevenLabs (oír y hablar) y lo usan dos canales, las notas de
+voz de Telegram y la pestaña «Hablar con Ruperto» del front
+(`backend/app/routers/ruperto.py`, `frontend/src/componentes/HablarRuperto.tsx`),
+que anima el mismo avatar del tablero (`LirioSvg`). La voz nunca es condición
+para contestar: sin `ELEVENLABS_API_KEY` o sin créditos todo sigue en texto y
+el front cae a la voz del navegador. Con una clave real se verifica con
+`python backend/scripts/probar_voz.py`.
+
 ## Datos
 
 El almacenamiento es **Postgres en Railway**, alimentado por HTTPS desde la

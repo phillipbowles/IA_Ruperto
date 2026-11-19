@@ -51,6 +51,86 @@ function Hoja({ c, j, lam, n }: (typeof HOJAS)[number]) {
   );
 }
 
+/** El dibujo solo, sin la tarjeta. Lo comparten la cabecera del tablero y la
+ *  pestaña «Hablar con Ruperto»: la pose sale de la clase `lirio--<estado>` del
+ *  contenedor, y la boca que habla de `lirio--hablando` y la variable `--boca`. */
+export function LirioSvg({ nombre }: { nombre: string }) {
+  const [atras, ...frente] = HOJAS;
+  return (
+    <svg viewBox="0 0 240 260" role="img" aria-label={`Lirio de paz: ${nombre.toLowerCase()}`}>
+      <ellipse cx="120" cy="254" rx="66" ry="5" className="lirio-sombra" />
+      <path d="M68,184 L172,184 L162,245 Q161,252 154,252 L86,252 Q79,252 78,245 Z" className="lirio-maceta" />
+      <path d="M82,192 L90,244" className="lirio-nervio" />
+      <rect x="60" y="168" width="120" height="20" rx="7" className="lirio-borde" />
+      <ellipse cx="120" cy="174" rx="52" ry="6" className="lirio-tierra" />
+      <g className="lirio-grietas">
+        <path d="M94,174 l6,-2 l5,3" />
+        <path d="M132,173 l5,2 l7,-2" />
+      </g>
+
+      <g className="lirio-cara lirio-cara--saludable">
+        <circle className="lirio-ojo" cx="104" cy="212" r="4.5" />
+        <circle className="lirio-ojo" cx="136" cy="212" r="4.5" />
+        <circle className="lirio-brillo-ojo" cx="105.6" cy="210.4" r="1.4" />
+        <circle className="lirio-brillo-ojo" cx="137.6" cy="210.4" r="1.4" />
+        <path className="lirio-trazo lirio-boca" d="M111,224 Q120,233 129,224" />
+        <ellipse className="lirio-mejilla" cx="94" cy="221" rx="5" ry="3" />
+        <ellipse className="lirio-mejilla" cx="146" cy="221" rx="5" ry="3" />
+      </g>
+      <g className="lirio-cara lirio-cara--estresada">
+        <circle className="lirio-ojo" cx="104" cy="213" r="3.8" />
+        <circle className="lirio-ojo" cx="136" cy="213" r="3.8" />
+        <path className="lirio-trazo" d="M97,206 L109,202" />
+        <path className="lirio-trazo" d="M131,202 L143,206" />
+        <path className="lirio-trazo lirio-boca" d="M111,228 Q115.5,224 120,228 Q124.5,232 129,228" />
+        <g transform="translate(153,197)">
+          <path className="lirio-gota" d="M0,-7 C3,-2 5,1 5,3 A5,5 0 0 1 -5,3 C-5,1 -3,-2 0,-7 Z" />
+        </g>
+      </g>
+      <g className="lirio-cara lirio-cara--marchita">
+        <path className="lirio-trazo" d="M98,214 Q104,209 110,214" />
+        <path className="lirio-trazo" d="M130,214 Q136,209 142,214" />
+        <path className="lirio-trazo lirio-boca" d="M111,232 Q120,223 129,232" />
+      </g>
+      <g className="lirio-cara lirio-cara--sin">
+        <circle className="lirio-ojo" cx="104" cy="212" r="3.8" />
+        <circle className="lirio-ojo" cx="136" cy="212" r="3.8" />
+        <path className="lirio-trazo lirio-boca" d="M112,227 L128,227" />
+      </g>
+
+      {/* La boca que habla: sólo se ve con .lirio--hablando y se abre con --boca (0 a 1). */}
+      <g className="lirio-boca-voz">
+        <ellipse className="lirio-boca-hueco" cx="120" cy="228" rx="7.5" ry="7" />
+        <ellipse className="lirio-boca-lengua" cx="120" cy="231.5" rx="4" ry="2.6" />
+      </g>
+
+      <g className="lirio-planta" style={{ transformOrigin: "120px 176px" }}>
+        <Hoja {...atras} />
+        <g className="lirio-tallo" style={{ transformOrigin: "120px 176px" }}>
+          <path className="lirio-peciolo" d="M120,176 C121,140 119,100 120,64" />
+          <g className="lirio-espata" style={{ transformOrigin: "120px 64px" }}>
+            <path className="lirio-espata-forma" d="M120,64 C102,56 99,30 120,8 C141,30 138,56 120,64 Z" />
+            <path className="lirio-espata-nervio" d="M120,60 L120,16" />
+            <ellipse className="lirio-espadice" cx="122" cy="44" rx="4" ry="12" />
+          </g>
+        </g>
+        {frente.map((h) => <Hoja key={h.c} {...h} />)}
+      </g>
+
+      <g className="lirio-brillos">
+        <g transform="translate(58,70)"><path className="lirio-estrella" d={ESTRELLA(7)} /></g>
+        <g transform="translate(184,52)"><path className="lirio-estrella e2" d={ESTRELLA(6)} /></g>
+        <g transform="translate(190,128)"><path className="lirio-estrella e3" d={ESTRELLA(5)} /></g>
+      </g>
+      <g className="lirio-caida">
+        <g transform="translate(176,96)">
+          <path className="lirio-hojita" d="M0,0 C-5,-4 -5,-12 0,-17 C5,-12 5,-4 0,0 Z" />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
 export type FuenteEstado =
   | { tipo: "modelo"; version: string; proba: number | null }
   | { tipo: "boton"; origen: EtiquetaOrigen | null };
@@ -62,76 +142,10 @@ export function AvatarLirio({ estado, fuente, ts }: {
 }) {
   const clave = estado ?? "sin";
   const { nombre, detalle } = INFO[clave];
-  const [atras, ...frente] = HOJAS;
-
   return (
     <section className={`lirio lirio--${clave}`} aria-live="polite">
       <div className="lirio__escena">
-        <svg viewBox="0 0 240 260" role="img" aria-label={`Lirio de paz: ${nombre.toLowerCase()}`}>
-          <ellipse cx="120" cy="254" rx="66" ry="5" className="lirio-sombra" />
-          <path d="M68,184 L172,184 L162,245 Q161,252 154,252 L86,252 Q79,252 78,245 Z" className="lirio-maceta" />
-          <path d="M82,192 L90,244" className="lirio-nervio" />
-          <rect x="60" y="168" width="120" height="20" rx="7" className="lirio-borde" />
-          <ellipse cx="120" cy="174" rx="52" ry="6" className="lirio-tierra" />
-          <g className="lirio-grietas">
-            <path d="M94,174 l6,-2 l5,3" />
-            <path d="M132,173 l5,2 l7,-2" />
-          </g>
-
-          <g className="lirio-cara lirio-cara--saludable">
-            <circle className="lirio-ojo" cx="104" cy="212" r="4.5" />
-            <circle className="lirio-ojo" cx="136" cy="212" r="4.5" />
-            <circle className="lirio-brillo-ojo" cx="105.6" cy="210.4" r="1.4" />
-            <circle className="lirio-brillo-ojo" cx="137.6" cy="210.4" r="1.4" />
-            <path className="lirio-trazo" d="M111,224 Q120,233 129,224" />
-            <ellipse className="lirio-mejilla" cx="94" cy="221" rx="5" ry="3" />
-            <ellipse className="lirio-mejilla" cx="146" cy="221" rx="5" ry="3" />
-          </g>
-          <g className="lirio-cara lirio-cara--estresada">
-            <circle className="lirio-ojo" cx="104" cy="213" r="3.8" />
-            <circle className="lirio-ojo" cx="136" cy="213" r="3.8" />
-            <path className="lirio-trazo" d="M97,206 L109,202" />
-            <path className="lirio-trazo" d="M131,202 L143,206" />
-            <path className="lirio-trazo" d="M111,228 Q115.5,224 120,228 Q124.5,232 129,228" />
-            <g transform="translate(153,197)">
-              <path className="lirio-gota" d="M0,-7 C3,-2 5,1 5,3 A5,5 0 0 1 -5,3 C-5,1 -3,-2 0,-7 Z" />
-            </g>
-          </g>
-          <g className="lirio-cara lirio-cara--marchita">
-            <path className="lirio-trazo" d="M98,214 Q104,209 110,214" />
-            <path className="lirio-trazo" d="M130,214 Q136,209 142,214" />
-            <path className="lirio-trazo" d="M111,232 Q120,223 129,232" />
-          </g>
-          <g className="lirio-cara lirio-cara--sin">
-            <circle className="lirio-ojo" cx="104" cy="212" r="3.8" />
-            <circle className="lirio-ojo" cx="136" cy="212" r="3.8" />
-            <path className="lirio-trazo" d="M112,227 L128,227" />
-          </g>
-
-          <g className="lirio-planta" style={{ transformOrigin: "120px 176px" }}>
-            <Hoja {...atras} />
-            <g className="lirio-tallo" style={{ transformOrigin: "120px 176px" }}>
-              <path className="lirio-peciolo" d="M120,176 C121,140 119,100 120,64" />
-              <g className="lirio-espata" style={{ transformOrigin: "120px 64px" }}>
-                <path className="lirio-espata-forma" d="M120,64 C102,56 99,30 120,8 C141,30 138,56 120,64 Z" />
-                <path className="lirio-espata-nervio" d="M120,60 L120,16" />
-                <ellipse className="lirio-espadice" cx="122" cy="44" rx="4" ry="12" />
-              </g>
-            </g>
-            {frente.map((h) => <Hoja key={h.c} {...h} />)}
-          </g>
-
-          <g className="lirio-brillos">
-            <g transform="translate(58,70)"><path className="lirio-estrella" d={ESTRELLA(7)} /></g>
-            <g transform="translate(184,52)"><path className="lirio-estrella e2" d={ESTRELLA(6)} /></g>
-            <g transform="translate(190,128)"><path className="lirio-estrella e3" d={ESTRELLA(5)} /></g>
-          </g>
-          <g className="lirio-caida">
-            <g transform="translate(176,96)">
-              <path className="lirio-hojita" d="M0,0 C-5,-4 -5,-12 0,-17 C5,-12 5,-4 0,0 Z" />
-            </g>
-          </g>
-        </svg>
+        <LirioSvg nombre={nombre} />
       </div>
 
       <div className="lirio__texto">

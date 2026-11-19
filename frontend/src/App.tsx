@@ -14,6 +14,7 @@ import { TablaRegistros } from "./componentes/TablaRegistros";
 import { AvatarLirio } from "./componentes/AvatarLirio";
 import { AnalisisFoto } from "./componentes/AnalisisFoto";
 import { ArbolModelo } from "./componentes/ArbolModelo";
+import { HablarRuperto } from "./componentes/HablarRuperto";
 import { featuresActuales } from "./lib/modeloPlaca";
 
 const RANGOS = [
@@ -25,6 +26,7 @@ const RANGOS = [
 const VISTAS = [
   { id: "panel", texto: "Panel de sensores" },
   { id: "foto", texto: "Analizar foto" },
+  { id: "hablar", texto: "Hablar con Ruperto" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
 
@@ -52,7 +54,7 @@ export function App() {
           </button>
         ))}
       </nav>
-      {vista === "foto" ? <VistaFoto /> : <Tablero />}
+      {vista === "foto" ? <VistaFoto /> : vista === "hablar" ? <VistaHablar /> : <Tablero />}
     </main>
   );
 }
@@ -67,6 +69,20 @@ function VistaFoto() {
         </div>
       </header>
       <AnalisisFoto />
+    </>
+  );
+}
+
+function VistaHablar() {
+  return (
+    <>
+      <header className="cabecera">
+        <div>
+          <h1>PlantaIa</h1>
+          <p className="sub">Lirio de paz · hablale a Ruperto y te cuenta cómo está y qué necesita</p>
+        </div>
+      </header>
+      <HablarRuperto />
     </>
   );
 }

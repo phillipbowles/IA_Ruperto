@@ -40,12 +40,14 @@ def texto_fragmentos(fragmentos: list[Fragmento]) -> str:
 
 
 def turno_usuario(estado: str, dias: str, fragmentos: list[Fragmento], pregunta: str,
-                  simple: str = "") -> str:
+                  simple: str = "", voz: bool = False) -> str:
     simple = f"EN PALABRAS SIMPLES\n{simple}\n\n" if simple else ""
+    # La nota va pegada a la pregunta: es lo último que lee el modelo (D221).
+    nota = f"\n\n{persona.NOTA_VOZ}" if voz else ""
     return (f"{simple}ESTADO ACTUAL\n{estado}\n\n"
             f"ÚLTIMOS 7 DÍAS\n{dias}\n\n"
             f"FRAGMENTOS\n{texto_fragmentos(fragmentos)}\n\n"
-            f"PREGUNTA\n{pregunta}")
+            f"PREGUNTA\n{pregunta}{nota}")
 
 
 # ─── citas (D211) ─────────────────────────────────────────────────────────

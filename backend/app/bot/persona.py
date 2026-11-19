@@ -117,5 +117,42 @@ AYUDA = (
 )
 
 
+# ─── voz (D219–D223): la pestaña «Hablar con Ruperto» y las notas de voz ───
+# Se agrega al turno cuando la respuesta se va a escuchar en vez de leer.
+NOTA_VOZ = ("MODO VOZ: esta respuesta se va a escuchar, no a leer. Máximo 45 palabras, "
+            "en dos o tres oraciones cortas y habladas. Sin viñetas, sin listas y sin "
+            "símbolos: las unidades en palabras (\"grados\", \"por ciento\", \"horas\"). "
+            "Si piden varios valores, decilos en una sola oración.")
+
+SIN_OIDOS = ("Hoy estoy sordo como una maceta: no puedo escuchar audios en este momento. "
+             "Escribime y te contesto igual.")
+
+NO_ENTENDI = ("No te escuché bien, se ve que tengo tierra en los oídos. "
+              "¿Me lo repetís más cerca del micrófono?")
+
+AUDIO_LARGO = ("¡Epa, qué discurso! Soy una planta, no un podcast: mandame un audio "
+               "de menos de un minuto.")
+
+SALUDO_VOZ = ("¡Hola! Soy Ruperto, tu lirio de paz. Tocá el micrófono y preguntame "
+              "cómo estoy o si necesito agua.")
+
+COSQUILLAS = (
+    "¡Ay, ay! ¡Que me hacés cosquillas en las hojas!",
+    "¡Epa! Con cuidado, que soy una planta delicada.",
+    "¡Je, je! Otra vez no, que se me cae una hoja de la risa.",
+    "¡Uy! Me despeinaste la flor.",
+)
+# Con sed no está para bromas: el toque también cuenta cómo está.
+COSQUILLAS_MAL = (
+    "Ay... no me sacudas, que estoy sin fuerzas.",
+    "Despacito, por favor. Hoy no estoy para cosquillas.",
+)
+
+
+def cosquillas(indice: int, mal: bool = False) -> str:
+    frases = COSQUILLAS_MAL if mal else COSQUILLAS
+    return frases[indice % len(frases)]
+
+
 def rechazo(rng: random.Random | None = None) -> str:
     return (rng or random).choice(RECHAZOS)

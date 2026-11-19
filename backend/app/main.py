@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from .routers import analisis, calibracion, fotos, mediciones
+from .routers import analisis, calibracion, fotos, mediciones, ruperto
 
 # El esquema lo administra Alembic, que corre en el entrypoint del contenedor
 # antes de levantar uvicorn. Ya no se llama a create_all(): dos mecanismos
@@ -37,6 +37,7 @@ app.include_router(mediciones.router)
 app.include_router(fotos.router)
 app.include_router(analisis.router)
 app.include_router(calibracion.router)
+app.include_router(ruperto.router)
 
 
 @app.get("/health", tags=["estado"])
